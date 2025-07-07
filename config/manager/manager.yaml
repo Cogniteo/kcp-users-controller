@@ -103,7 +103,7 @@ spec:
       volumes:
       - name: tls-certs
         secret:
-          secretName: kcp-controller-certs # Ensure this Secret exists with keys: tls.crt, tls.key, ca.crt
+          secretName: kcp-users-controller-client-cert # Ensure this Secret exists with keys: tls.crt, tls.key, ca.crt
           defaultMode: 0400
       serviceAccountName: controller-manager
       terminationGracePeriodSeconds: 10
