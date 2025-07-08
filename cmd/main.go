@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -37,6 +38,8 @@ import (
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
 	"piotrjanik.dev/users/internal/controller"
+	"piotrjanik.dev/users/pkg/cognito"
+	"piotrjanik.dev/users/pkg/userpool"
 
 	kcpv1alpha1 "piotrjanik.dev/users/api/v1alpha1"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
@@ -64,6 +67,7 @@ func main() {
 	var enableLeaderElection bool
 	var probeAddr string
 	var enableHTTP2 bool
+	var cognitoUserPoolID string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -77,6 +81,7 @@ func main() {
 	flag.StringVar(&clientKeyPath, "client-key", "", "Path to the client key (PEM format) for TLS authentication.")
 	flag.StringVar(&caCertPath, "ca-cert", "", "Path to the CA certificate (PEM format) for TLS server verification.")
 	flag.StringVar(&virtualWorkspaceUrl, "virtual-workspace-url", "", "The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). This will override the host in the kubeconfig.")
+	flag.StringVar(&cognitoUserPoolID, "cognito-user-pool-id", "", "AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -152,10 +157,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Initialize Cognito client if User Pool ID is provided
+	var userPoolClient userpool.Client
+	if cognitoUserPoolID != "" {
+		setupLog.Info("Initializing AWS Cognito client", "userPoolId", cognitoUserPoolID)
+		client, err := cognito.NewClient(context.Background(), cognitoUserPoolID)
+		if err != nil {
+			setupLog.Error(err, "unable to create Cognito client")
+			os.Exit(1)
+		}
+		userPoolClient = client
+	} else {
+		setupLog.Info("Cognito User Pool ID not provided, Cognito integration disabled")
+	}
+
 	if err := (&controller.UserReconciler{
-		Client:  mgr.GetLocalManager().GetClient(),
-		Scheme:  mgr.GetLocalManager().GetScheme(),
-		Manager: mgr,
+		Client:         mgr.GetLocalManager().GetClient(),
+		Scheme:         mgr.GetLocalManager().GetScheme(),
+		Manager:        mgr,
+		UserPoolClient: userPoolClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "User")
 		os.Exit(1)

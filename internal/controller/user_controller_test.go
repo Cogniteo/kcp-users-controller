@@ -50,6 +50,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcpv1alpha1 "piotrjanik.dev/users/api/v1alpha1"
+	"piotrjanik.dev/users/pkg/cognito"
 )
 
 // Test helper types
@@ -102,6 +103,8 @@ func (f *fakeManager) Engage(ctx context.Context, clusterName string, cluster cl
 	return nil
 }
 
+// Use the mock client from the cognito package for testing
+
 var _ = Describe("User Controller", func() {
 	Context("When reconciling a resource", func() {
 		const resourceName = "test-resource"
@@ -123,7 +126,10 @@ var _ = Describe("User Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: kcpv1alpha1.UserSpec{
+						Email:   "test@example.com",
+						Enabled: true,
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
@@ -147,10 +153,14 @@ var _ = Describe("User Controller", func() {
 				err:     nil,
 			}
 
+			// Create a mock Cognito client
+			mockCognitoClient := cognito.NewMockClient()
+
 			controllerReconciler := &UserReconciler{
-				Client:  k8sClient,
-				Scheme:  k8sClient.Scheme(),
-				Manager: mockManager,
+				Client:         k8sClient,
+				Scheme:         k8sClient.Scheme(),
+				Manager:        mockManager,
+				UserPoolClient: mockCognitoClient,
 			}
 
 			_, err := controllerReconciler.Reconcile(ctx, mcreconcile.Request{
@@ -158,8 +168,11 @@ var _ = Describe("User Controller", func() {
 				Request:     reconcile.Request{NamespacedName: typeNamespacedName},
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
+
+			// Verify user was created in Cognito
+			cognitoUser, err := mockCognitoClient.GetUser(ctx, resourceName)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cognitoUser.Username).To(Equal(resourceName))
 		})
 	})
 })
@@ -210,10 +223,15 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 				Name:      userName,
 				Namespace: userNamespace,
 			},
+			Spec: kcpv1alpha1.UserSpec{
+				Email:   "test@example.com",
+				Enabled: true,
+			},
 		}
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initialUser).Build()
 		mgr := &fakeManager{cluster: &fakeCluster{client: fakeClient}, err: nil}
-		r := &UserReconciler{Scheme: scheme, Manager: mgr}
+		mockCognitoClient := cognito.NewMockClient()
+		r := &UserReconciler{Scheme: scheme, Manager: mgr, UserPoolClient: mockCognitoClient}
 		_, err := r.Reconcile(context.Background(), mcreconcile.Request{
 			ClusterName: "cluster1",
 			Request:     reconcile.Request{NamespacedName: namespacedName},
@@ -231,6 +249,22 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 		} else {
 			if _, err := time.Parse(time.RFC3339, ts); err != nil {
 				t.Errorf("annotation lastReconciledAt not RFC3339: %v", err)
+			}
+		}
+
+		// Verify user was created in Cognito
+		cognitoUser, err := mockCognitoClient.GetUser(context.Background(), userName)
+		if err != nil {
+			t.Errorf("expected user to be created in Cognito, got error: %v", err)
+		} else {
+			if cognitoUser.Username != userName {
+				t.Errorf("expected username %s, got %s", userName, cognitoUser.Username)
+			}
+			if cognitoUser.Email != "test@example.com" {
+				t.Errorf("expected email test@example.com, got %s", cognitoUser.Email)
+			}
+			if !cognitoUser.Enabled {
+				t.Errorf("expected user to be enabled")
 			}
 		}
 	})

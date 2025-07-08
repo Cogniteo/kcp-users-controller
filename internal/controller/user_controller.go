@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -28,6 +29,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	kcpv1alpha1 "piotrjanik.dev/users/api/v1alpha1"
+	"piotrjanik.dev/users/pkg/userpool"
 	mcbuilder "sigs.k8s.io/multicluster-runtime/pkg/builder"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
@@ -36,8 +38,9 @@ import (
 // UserReconciler reconciles a User object
 type UserReconciler struct {
 	client.Client
-	Scheme  *runtime.Scheme
-	Manager mcmanager.Manager
+	Scheme         *runtime.Scheme
+	Manager        mcmanager.Manager
+	UserPoolClient userpool.Client
 }
 
 // +kubebuilder:rbac:groups=kcp.cogniteo.io,resources=users,verbs=get;list;watch;create;update;patch;delete
@@ -66,9 +69,26 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	client := cl.GetClient()
 	if err := client.Get(ctx, req.NamespacedName, &user); err != nil {
 		if errors.IsNotFound(err) {
+			// User was deleted, remove from user pool
+			if r.UserPoolClient != nil {
+				if err := r.UserPoolClient.DeleteUser(ctx, req.NamespacedName.Name); err != nil {
+					log.Error(err, "Failed to delete user from user pool", "username", req.NamespacedName.Name)
+					// Continue with reconciliation even if user pool deletion fails
+				} else {
+					log.Info("User deleted from user pool", "username", req.NamespacedName.Name)
+				}
+			}
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Sync user with user pool
+	if r.UserPoolClient != nil {
+		if err := r.syncUserWithUserPool(ctx, &user, log); err != nil {
+			log.Error(err, "Failed to sync user with user pool")
+			return ctrl.Result{RequeueAfter: time.Minute * 5}, err
+		}
 	}
 
 	// Add or update annotation
@@ -83,6 +103,37 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+// syncUserWithUserPool synchronizes a Kubernetes User with User Pool
+func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1alpha1.User, log logr.Logger) error {
+	poolUser := &userpool.User{
+		Username: user.Name,
+		Email:    user.Spec.Email,
+		Enabled:  user.Spec.Enabled,
+	}
+
+	// Check if user exists in user pool
+	existingUser, err := r.UserPoolClient.GetUser(ctx, user.Name)
+	if err != nil {
+		// User doesn't exist, create it
+		log.Info("Creating user in user pool", "username", user.Name)
+		if err := r.UserPoolClient.CreateUser(ctx, poolUser); err != nil {
+			return fmt.Errorf("failed to create user in user pool: %w", err)
+		}
+		log.Info("User created in user pool", "username", user.Name)
+	} else {
+		// User exists, update if needed
+		if existingUser.Email != poolUser.Email || existingUser.Enabled != poolUser.Enabled {
+			log.Info("Updating user in user pool", "username", user.Name)
+			if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
+				return fmt.Errorf("failed to update user in user pool: %w", err)
+			}
+			log.Info("User updated in user pool", "username", user.Name)
+		}
+	}
+
+	return nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

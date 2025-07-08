@@ -25,11 +25,11 @@ import (
 
 // UserSpec defines the desired state of User.
 type UserSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Email is the user's email address
+	Email string `json:"email,omitempty"`
 
-	// Foo is an example field of User. Edit user_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	// Enabled indicates whether the user is enabled
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // UserStatus defines the observed state of User.

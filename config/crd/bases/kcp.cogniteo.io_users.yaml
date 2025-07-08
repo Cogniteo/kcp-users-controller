@@ -39,10 +39,12 @@ spec:
           spec:
             description: UserSpec defines the desired state of User.
             properties:
-              foo:
-                description: Foo is an example field of User. Edit user_types.go to
-                  remove/update
+              email:
+                description: Email is the user's email address
                 type: string
+              enabled:
+                description: Enabled indicates whether the user is enabled
+                type: boolean
             type: object
           status:
             description: UserStatus defines the observed state of User.
