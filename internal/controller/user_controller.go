@@ -66,16 +66,16 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to get cluster: %w", err)
 	}
-	client := cl.GetClient()
-	if err := client.Get(ctx, req.NamespacedName, &user); err != nil {
+	clusterClient := cl.GetClient()
+	if err := clusterClient.Get(ctx, req.NamespacedName, &user); err != nil {
 		if errors.IsNotFound(err) {
 			// User was deleted, remove from user pool
 			if r.UserPoolClient != nil {
-				if err := r.UserPoolClient.DeleteUser(ctx, req.NamespacedName.Name); err != nil {
-					log.Error(err, "Failed to delete user from user pool", "username", req.NamespacedName.Name)
+				if err := r.UserPoolClient.DeleteUser(ctx, req.Name); err != nil {
+					log.Error(err, "Failed to delete user from user pool", "username", req.Name)
 					// Continue with reconciliation even if user pool deletion fails
 				} else {
-					log.Info("User deleted from user pool", "username", req.NamespacedName.Name)
+					log.Info("User deleted from user pool", "username", req.Name)
 				}
 			}
 			return ctrl.Result{}, nil
@@ -97,7 +97,7 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 	user.Annotations["kcp.cogniteo.io/lastReconciledAt"] = time.Now().Format(time.RFC3339)
 
-	if err := client.Update(ctx, &user); err != nil {
+	if err := clusterClient.Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User annotation")
 		return ctrl.Result{}, err
 	}

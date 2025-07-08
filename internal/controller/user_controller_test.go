@@ -99,7 +99,7 @@ func (f *fakeManager) GetManager(ctx context.Context, clusterName string) (manag
 func (f *fakeManager) GetLocalManager() manager.Manager     { return nil }
 func (f *fakeManager) GetProvider() multicluster.Provider   { return nil }
 func (f *fakeManager) GetFieldIndexer() client.FieldIndexer { return nil }
-func (f *fakeManager) Engage(ctx context.Context, clusterName string, cluster cluster.Cluster) error {
+func (f *fakeManager) Engage(ctx context.Context, clusterName string, clusterObj cluster.Cluster) error {
 	return nil
 }
 
@@ -180,7 +180,9 @@ var _ = Describe("User Controller", func() {
 // Unit tests using standard testing framework
 func TestUserReconciler_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
-	clientgoscheme.AddToScheme(scheme)
+	if err := clientgoscheme.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add clientgoscheme: %v", err)
+	}
 	if err := kcpv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to add kcpv1alpha1 scheme: %v", err)
 	}

@@ -19,6 +19,7 @@ package cognito
 import (
 	"context"
 	"fmt"
+
 	"piotrjanik.dev/users/pkg/userpool"
 )
 
@@ -118,7 +119,7 @@ func (m *MockClient) DeleteUser(ctx context.Context, username string) error {
 
 // ListUsers lists all users in the mock store
 func (m *MockClient) ListUsers(ctx context.Context) ([]*userpool.User, error) {
-	var users []*userpool.User
+	users := make([]*userpool.User, 0, len(m.users))
 	for _, user := range m.users {
 		// Return copies to avoid reference issues
 		users = append(users, &userpool.User{

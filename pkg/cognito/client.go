@@ -18,6 +18,7 @@ package cognito
 
 import (
 	"context"
+
 	"piotrjanik.dev/users/pkg/userpool"
 )
 

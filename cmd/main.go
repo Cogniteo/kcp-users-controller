@@ -69,19 +69,24 @@ func main() {
 	var enableHTTP2 bool
 	var cognitoUserPoolID string
 	var tlsOpts []func(*tls.Config)
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
-		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
+	flag.StringVar(&metricsAddr, "metrics-bind-address", "0",
+		"The address the metrics endpoint binds to. "+
+			"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&clientCertPath, "client-cert", "", "Path to the client certificate (PEM format) for TLS authentication.")
+	flag.StringVar(&clientCertPath, "client-cert", "",
+		"Path to the client certificate (PEM format) for TLS authentication.")
 	flag.StringVar(&clientKeyPath, "client-key", "", "Path to the client key (PEM format) for TLS authentication.")
 	flag.StringVar(&caCertPath, "ca-cert", "", "Path to the CA certificate (PEM format) for TLS server verification.")
-	flag.StringVar(&virtualWorkspaceUrl, "virtual-workspace-url", "", "The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). This will override the host in the kubeconfig.")
-	flag.StringVar(&cognitoUserPoolID, "cognito-user-pool-id", "", "AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.")
+	flag.StringVar(&virtualWorkspaceUrl, "virtual-workspace-url", "",
+		"The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). "+
+			"This will override the host in the kubeconfig.")
+	flag.StringVar(&cognitoUserPoolID, "cognito-user-pool-id", "",
+		"AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -127,13 +132,13 @@ func main() {
 
 	// TLS authentication for REST client
 	if clientCertPath != "" {
-		cfg.TLSClientConfig.CertFile = clientCertPath
+		cfg.CertFile = clientCertPath
 	}
 	if clientKeyPath != "" {
-		cfg.TLSClientConfig.KeyFile = clientKeyPath
+		cfg.KeyFile = clientKeyPath
 	}
 	if caCertPath != "" {
-		cfg.TLSClientConfig.CAFile = caCertPath
+		cfg.CAFile = caCertPath
 	}
 
 	provider, err := apiexport.New(cfg, apiexport.Options{
