@@ -3,38 +3,82 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 	"time"
 
+	logr "github.com/go-logr/logr"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
+	"sigs.k8s.io/controller-runtime/pkg/config"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	reconcile "sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
 	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
 
 	kcpv1alpha1 "piotrjanik.dev/users/api/v1alpha1"
 )
 
-type fakeCluster struct {
+type testCluster struct {
 	client client.Client
 }
 
-func (f *fakeCluster) GetClient() client.Client {
-	return f.client
-}
+func (f *testCluster) GetClient() client.Client                             { return f.client }
+func (f *testCluster) GetAPIReader() client.Reader                          { return f.client }
+func (f *testCluster) GetHTTPClient() *http.Client                          { return nil }
+func (f *testCluster) GetConfig() *rest.Config                              { return nil }
+func (f *testCluster) GetCache() cache.Cache                                { return nil }
+func (f *testCluster) GetScheme() *runtime.Scheme                           { return nil }
+func (f *testCluster) GetFieldIndexer() client.FieldIndexer                 { return nil }
+func (f *testCluster) GetEventRecorderFor(name string) record.EventRecorder { return nil }
+func (f *testCluster) GetRESTMapper() meta.RESTMapper                       { return nil }
+func (f *testCluster) Start(ctx context.Context) error                      { return nil }
 
-type fakeManager struct {
-	cluster mcmanager.Cluster
+type testManager struct {
+	cluster cluster.Cluster
 	err     error
 }
 
-func (f *fakeManager) GetCluster(ctx context.Context, name string) (mcmanager.Cluster, error) {
+func (f *testManager) GetCluster(ctx context.Context, name string) (cluster.Cluster, error) {
 	return f.cluster, f.err
+}
+
+// Minimal Manager interface implementation
+func (f *testManager) Add(runnable mcmanager.Runnable) error { return nil }
+func (f *testManager) Elected() <-chan struct{}              { return nil }
+func (f *testManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+func (f *testManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
+func (f *testManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
+func (f *testManager) Start(ctx context.Context) error                          { return nil }
+func (f *testManager) GetWebhookServer() webhook.Server                         { return nil }
+func (f *testManager) GetLogger() logr.Logger                                   { return logr.Logger{} }
+func (f *testManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
+func (f *testManager) ClusterFromContext(ctx context.Context) (cluster.Cluster, error) {
+	return nil, nil
+}
+func (f *testManager) GetManager(ctx context.Context, clusterName string) (manager.Manager, error) {
+	return nil, nil
+}
+func (f *testManager) GetLocalManager() manager.Manager     { return nil }
+func (f *testManager) GetProvider() multicluster.Provider   { return nil }
+func (f *testManager) GetFieldIndexer() client.FieldIndexer { return nil }
+func (f *testManager) Engage(ctx context.Context, clusterName string, cluster cluster.Cluster) error {
+	return nil
 }
 
 func TestUserReconciler_Reconcile(t *testing.T) {
@@ -49,7 +93,7 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 	namespacedName := types.NamespacedName{Name: userName, Namespace: userNamespace}
 
 	t.Run("cluster retrieval failure", func(t *testing.T) {
-		mgr := &fakeManager{err: fmt.Errorf("cluster not found")}
+		mgr := &testManager{err: fmt.Errorf("cluster not found")}
 		r := &UserReconciler{Scheme: scheme, Manager: mgr}
 		_, err := r.Reconcile(context.Background(), mcreconcile.Request{
 			ClusterName: "cluster1",
@@ -62,7 +106,7 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 
 	t.Run("resource not found", func(t *testing.T) {
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		mgr := &fakeManager{cluster: &fakeCluster{client: fakeClient}}
+		mgr := &testManager{cluster: &testCluster{client: fakeClient}, err: nil}
 		r := &UserReconciler{Scheme: scheme, Manager: mgr}
 		result, err := r.Reconcile(context.Background(), mcreconcile.Request{
 			ClusterName: "cluster1",
@@ -71,7 +115,7 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 		if err != nil {
 			t.Errorf("expected no error, got %v", err)
 		}
-		if result != ctrl.Result{} {
+		if result != (ctrl.Result{}) {
 			t.Errorf("expected empty result, got %v", result)
 		}
 	})
@@ -84,7 +128,7 @@ func TestUserReconciler_Reconcile(t *testing.T) {
 			},
 		}
 		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initialUser).Build()
-		mgr := &fakeManager{cluster: &fakeCluster{client: fakeClient}}
+		mgr := &testManager{cluster: &testCluster{client: fakeClient}, err: nil}
 		r := &UserReconciler{Scheme: scheme, Manager: mgr}
 		_, err := r.Reconcile(context.Background(), mcreconcile.Request{
 			ClusterName: "cluster1",
