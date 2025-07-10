@@ -92,7 +92,15 @@ jobs:
       - name: Generate changelog
         id: changelog
         run: |
-          echo "changelog=$(git log $(git describe --tags --abbrev=0)..HEAD --pretty=format:'- %s' | sed '/Merge/d')" >> $GITHUB_OUTPUT
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            CHANGELOG=$(git log --pretty=format:'- %s' | sed '/Merge/d' | head -10)
+          else
+            CHANGELOG=$(git log ${PREVIOUS_TAG}..HEAD --pretty=format:'- %s' | sed '/Merge/d')
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
