@@ -71,10 +71,6 @@ metadata:
   name: john-doe
   namespace: default
 spec:
-  email: john.doe@example.com
-  username: johndoe
-  temporaryPassword: TempPass123!
-  # Additional user attributes
 ```
 
 Apply the resource:
