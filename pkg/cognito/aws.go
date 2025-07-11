@@ -24,7 +24,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"piotrjanik.dev/users/pkg/userpool"
+	"kcp.cogniteo.io/users/pkg/userpool"
 )
 
 // AWSClient implements the userpool.Client interface for AWS Cognito

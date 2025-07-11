@@ -66,7 +66,8 @@ spec:
           - --client-cert=/etc/kcp-certs/tls.crt
           - --client-key=/etc/kcp-certs/tls.key
           - --ca-cert=/etc/kcp-certs/ca.crt
-          - --virtual-workspace-url=https://api.kcp.piotrjanik.dev:443/services/apiexport/root/users
+          - --virtual-workspace-url=${VIRTUAL_WORKSPACE_URL}
+          - --cognito-user-pool-id=${COGNITO_USER_POOL_ID}
         image: controller:latest
         name: manager
         ports: []

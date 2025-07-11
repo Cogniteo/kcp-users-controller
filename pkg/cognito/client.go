@@ -19,7 +19,7 @@ package cognito
 import (
 	"context"
 
-	"piotrjanik.dev/users/pkg/userpool"
+	"kcp.cogniteo.io/users/pkg/userpool"
 )
 
 // NewClient creates a new Cognito client with Pod Identity authentication

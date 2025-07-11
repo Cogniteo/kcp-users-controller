@@ -49,8 +49,8 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	kcpv1alpha1 "piotrjanik.dev/users/api/v1alpha1"
-	"piotrjanik.dev/users/pkg/cognito"
+	kcpv1alpha1 "kcp.cogniteo.io/users/api/v1alpha1"
+	"kcp.cogniteo.io/users/pkg/cognito"
 )
 
 // Test helper types

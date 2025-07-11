@@ -1,4 +1,4 @@
-module piotrjanik.dev/users
+module kcp.cogniteo.io/users
 
 go 1.24
 
