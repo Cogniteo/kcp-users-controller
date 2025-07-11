@@ -65,7 +65,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/piotrjanik/kcp-users-controller
+          images: ghcr.io/Cogniteo/kcp-users-controller
           tags: |
             type=raw,value=${{ needs.version.outputs.version_tag }}
             type=raw,value=latest
@@ -151,6 +151,6 @@ jobs:
             ${{ steps.changelog.outputs.changelog }}
             
             ## Docker Image
-            `ghcr.io/piotrjanik/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
+            `ghcr.io/Cogniteo/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
           draft: false
           prerelease: false
