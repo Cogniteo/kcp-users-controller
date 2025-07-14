@@ -36,10 +36,10 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/kcp-dev/multicluster-provider/apiexport"
 	"github.com/cogniteo/kcp-users-controller/internal/controller"
 	"github.com/cogniteo/kcp-users-controller/pkg/cognito"
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
+	"github.com/kcp-dev/multicluster-provider/apiexport"
 
 	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
