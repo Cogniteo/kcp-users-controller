@@ -37,11 +37,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	"github.com/kcp-dev/multicluster-provider/apiexport"
-	"kcp.cogniteo.io/users/internal/controller"
-	"kcp.cogniteo.io/users/pkg/cognito"
-	"kcp.cogniteo.io/users/pkg/userpool"
+	"github.com/cogniteo/kcp-users-controller/internal/controller"
+	"github.com/cogniteo/kcp-users-controller/pkg/cognito"
+	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 
-	kcpv1alpha1 "kcp.cogniteo.io/users/api/v1alpha1"
+	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 	// +kubebuilder:scaffold:imports
 )

@@ -32,7 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	kcpv1alpha1 "kcp.cogniteo.io/users/api/v1alpha1"
+	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 

@@ -20,7 +20,7 @@ import (
 	"context"
 	"fmt"
 
-	"kcp.cogniteo.io/users/pkg/userpool"
+	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 )
 
 // MockClient implements the userpool.Client interface for testing

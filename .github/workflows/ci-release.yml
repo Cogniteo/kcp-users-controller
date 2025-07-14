@@ -117,10 +117,46 @@ jobs:
             exit 1
           fi
 
+  package-helm-chart:
+    name: Package and publish Helm chart
+    runs-on: ubuntu-latest
+    needs: [version, push-tag]
+    if: needs.version.outputs.version_changed == 'true'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: '3.12.0'
+
+      - name: Update Chart.yaml with new version
+        run: |
+          sed -i "s/version: .*/version: ${{ needs.version.outputs.version_tag }}/" dist/chart/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: \"${{ needs.version.outputs.version_tag }}\"/" dist/chart/Chart.yaml
+
+      - name: Package Helm chart
+        run: |
+          helm package dist/chart
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push Helm chart to GitHub Container Registry
+        run: |
+          helm push users-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo
+
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [version, push-tag]
+    needs: [version, push-tag, package-helm-chart]
     if: needs.version.outputs.version_changed == 'true'
     steps:
       - name: Checkout repository
@@ -149,8 +185,11 @@ jobs:
           body: |
             ## Changes in this Release
             ${{ steps.changelog.outputs.changelog }}
-            
+
             ## Docker Image
             `ghcr.io/Cogniteo/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
+
+            ## Helm Chart
+            `oci://ghcr.io/cogniteo/users:${{ needs.version.outputs.version_tag }}`
           draft: false
           prerelease: false

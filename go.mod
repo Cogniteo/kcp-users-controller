@@ -1,4 +1,4 @@
-module kcp.cogniteo.io/users
+module github.com/cogniteo/kcp-users-controller
 
 go 1.24
 
