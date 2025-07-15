@@ -227,7 +227,7 @@ jobs:
 
       - name: Push Helm chart to GitHub Container Registry
         run: |
-          helm push users-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo
+          helm push kcp-users-controller-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo
 
   create-release:
     name: Create GitHub Release
