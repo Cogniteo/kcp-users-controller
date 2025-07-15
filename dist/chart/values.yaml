@@ -39,6 +39,14 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: users-controller-manager
+  # Extra secrets to be mounted as volumes
+  extraSecrets: []
+  # Example:
+  # extraSecrets:
+  #   - name: my-secret
+  #     secretName: my-secret-name
+  #     mountPath: /etc/secrets/my-secret
+  #     readOnly: true
 
 # [RBAC]: To enable RBAC (Permissions) configurations
 rbac:
