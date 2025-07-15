@@ -61,19 +61,47 @@ func init() {
 // nolint:gocyclo
 func main() {
 	var (
-		app = kingpin.New("kcp-users-controller", "A Kubernetes controller for managing KCP users through AWS Cognito integration")
-		metricsAddr = app.Flag("metrics-bind-address", "The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.").Envar("METRICS_BIND_ADDRESS").Default("0").String()
-		probeAddr = app.Flag("health-probe-bind-address", "The address the probe endpoint binds to.").Envar("HEALTH_PROBE_BIND_ADDRESS").Default(":8081").String()
-		enableLeaderElection = app.Flag("leader-elect", "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.").Envar("LEADER_ELECT").Default("false").Bool()
-		enableHTTP2 = app.Flag("enable-http2", "If set, HTTP/2 will be enabled for the metrics and webhook servers.").Envar("ENABLE_HTTP2").Default("false").Bool()
-		clientCertPath = app.Flag("client-cert", "Path to the client certificate (PEM format) for TLS authentication.").Envar("CLIENT_CERT_PATH").String()
-		clientKeyPath = app.Flag("client-key", "Path to the client key (PEM format) for TLS authentication.").Envar("CLIENT_KEY_PATH").String()
-		caCertPath = app.Flag("ca-cert", "Path to the CA certificate (PEM format) for TLS server verification.").Envar("CA_CERT_PATH").String()
-		virtualWorkspaceUrl = app.Flag("virtual-workspace-url", "The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). This will override the host in the kubeconfig.").Envar("VIRTUAL_WORKSPACE_URL").String()
-		cognitoUserPoolID = app.Flag("cognito-user-pool-id", "AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.").Envar("COGNITO_USER_POOL_ID").String()
-		cognitoUserPoolName = app.Flag("cognito-user-pool-name", "AWS Cognito User Pool Name. If not provided, Cognito integration will be disabled.").Envar("COGNITO_USER_POOL_NAME").String()
+		app = kingpin.New("kcp-users-controller",
+			"A Kubernetes controller for managing KCP users through AWS Cognito integration")
+		metricsAddr = app.Flag("metrics-bind-address",
+			"The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, "+
+				"or leave as 0 to disable the metrics service.").
+			Envar("METRICS_BIND_ADDRESS").Default("0").String()
+		probeAddr = app.Flag("health-probe-bind-address",
+			"The address the probe endpoint binds to.").
+			Envar("HEALTH_PROBE_BIND_ADDRESS").Default(":8081").String()
+		enableLeaderElection = app.Flag("leader-elect",
+			"Enable leader election for controller manager. Enabling this will ensure there is "+
+				"only one active controller manager.").
+			Envar("LEADER_ELECT").Default("false").Bool()
+		enableHTTP2 = app.Flag("enable-http2",
+			"If set, HTTP/2 will be enabled for the metrics and webhook servers.").
+			Envar("ENABLE_HTTP2").Default("false").Bool()
+		clientCertPath = app.Flag("client-cert",
+			"Path to the client certificate (PEM format) for TLS authentication.").
+			Envar("CLIENT_CERT_PATH").String()
+		clientKeyPath = app.Flag("client-key",
+			"Path to the client key (PEM format) for TLS authentication.").
+			Envar("CLIENT_KEY_PATH").String()
+		caCertPath = app.Flag("ca-cert",
+			"Path to the CA certificate (PEM format) for TLS server verification.").
+			Envar("CA_CERT_PATH").String()
+		virtualWorkspaceUrl = app.Flag("virtual-workspace-url",
+			"The URL of the virtual workspace (e.g., "+
+				"https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). "+
+				"This will override the host in the kubeconfig.").
+			Envar("VIRTUAL_WORKSPACE_URL").String()
+		cognitoUserPoolID = app.Flag("cognito-user-pool-id",
+			"AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.").
+			Envar("COGNITO_USER_POOL_ID").String()
+		cognitoUserPoolName = app.Flag("cognito-user-pool-name",
+			"AWS Cognito User Pool Name. If not provided, Cognito integration will be disabled.").
+			Envar("COGNITO_USER_POOL_NAME").String()
 		// Zap logger flags
-		zapDevel = app.Flag("zap-devel", "Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn). Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error).").Envar("ZAP_DEVEL").Default("true").Bool()
+		zapDevel = app.Flag("zap-devel",
+			"Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn). "+
+				"Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error).").
+			Envar("ZAP_DEVEL").Default("true").Bool()
 	)
 
 	kingpin.MustParse(app.Parse(os.Args[1:]))

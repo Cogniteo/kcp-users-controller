@@ -79,7 +79,8 @@ func NewAWSClientByName(ctx context.Context, userPoolName string) (*AWSClient, e
 }
 
 // findUserPoolIDByName finds a user pool ID by its name
-func findUserPoolIDByName(ctx context.Context, cognito *cognitoidentityprovider.Client, userPoolName string) (string, error) {
+func findUserPoolIDByName(ctx context.Context, cognito *cognitoidentityprovider.Client,
+	userPoolName string) (string, error) {
 	var nextToken *string
 
 	for {
