@@ -27,3 +27,9 @@ import (
 func NewClient(ctx context.Context, userPoolID string) (userpool.Client, error) {
 	return NewAWSClient(ctx, userPoolID)
 }
+
+// NewClientByName creates a new Cognito client by finding user pool ID from name
+// This is a convenience function that returns the AWS implementation
+func NewClientByName(ctx context.Context, userPoolName string) (userpool.Client, error) {
+	return NewAWSClientByName(ctx, userPoolName)
+}

@@ -19,6 +19,7 @@ package cognito
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -49,6 +50,64 @@ func NewAWSClient(ctx context.Context, userPoolID string) (*AWSClient, error) {
 		cognito:    cognitoidentityprovider.NewFromConfig(cfg),
 		userPoolID: userPoolID,
 	}, nil
+}
+
+// NewAWSClientByName creates a new AWS Cognito client by finding user pool ID from name
+func NewAWSClientByName(ctx context.Context, userPoolName string) (*AWSClient, error) {
+	if userPoolName == "" {
+		return nil, fmt.Errorf("userPoolName cannot be empty")
+	}
+
+	// Load AWS configuration with Pod Identity (IRSA)
+	cfg, err := config.LoadDefaultConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load AWS config: %w", err)
+	}
+
+	cognito := cognitoidentityprovider.NewFromConfig(cfg)
+
+	// Find user pool ID by name
+	userPoolID, err := findUserPoolIDByName(ctx, cognito, userPoolName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find user pool by name %s: %w", userPoolName, err)
+	}
+
+	return &AWSClient{
+		cognito:    cognito,
+		userPoolID: userPoolID,
+	}, nil
+}
+
+// findUserPoolIDByName finds a user pool ID by its name
+func findUserPoolIDByName(ctx context.Context, cognito *cognitoidentityprovider.Client, userPoolName string) (string, error) {
+	var nextToken *string
+
+	for {
+		input := &cognitoidentityprovider.ListUserPoolsInput{
+			MaxResults: aws.Int32(60), // Max allowed by AWS
+			NextToken:  nextToken,
+		}
+
+		output, err := cognito.ListUserPools(ctx, input)
+		if err != nil {
+			return "", fmt.Errorf("failed to list user pools: %w", err)
+		}
+
+		for _, userPool := range output.UserPools {
+			if userPool.Name != nil && strings.EqualFold(*userPool.Name, userPoolName) {
+				if userPool.Id != nil {
+					return *userPool.Id, nil
+				}
+			}
+		}
+
+		nextToken = output.NextToken
+		if nextToken == nil {
+			break
+		}
+	}
+
+	return "", fmt.Errorf("user pool with name %s not found", userPoolName)
 }
 
 // CreateUser creates a new user in the Cognito user pool

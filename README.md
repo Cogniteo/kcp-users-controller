@@ -47,16 +47,42 @@ make deploy IMG=ghcr.io/cogniteo/kcp-users-controller:latest
 
 ## Configuration
 
-Configure AWS credentials and Cognito settings through environment variables or Kubernetes secrets:
+Configure AWS credentials and Cognito settings through environment variables, command-line flags, or Kubernetes secrets:
+
+### Environment Variables
 
 ```yaml
 env:
 - name: AWS_REGION
   value: "us-west-2"
+# Use either COGNITO_USER_POOL_ID or COGNITO_USER_POOL_NAME (not both)
 - name: COGNITO_USER_POOL_ID
-  value: "us-west-2_example"
-# Add other AWS configuration as needed
+  value: "us-west-2_example123"
+# OR
+- name: COGNITO_USER_POOL_NAME
+  value: "my-user-pool"
+- name: METRICS_BIND_ADDRESS
+  value: ":8443"
+- name: HEALTH_PROBE_BIND_ADDRESS
+  value: ":8081"
+- name: LEADER_ELECT
+  value: "true"
+# Add other configuration as needed
 ```
+
+### Command-Line Flags
+
+All configuration options can also be set via command-line flags:
+
+```bash
+# Using User Pool ID
+./kcp-users-controller --cognito-user-pool-id=us-west-2_example123 --metrics-bind-address=:8443
+
+# OR using User Pool Name
+./kcp-users-controller --cognito-user-pool-name=my-user-pool --metrics-bind-address=:8443
+```
+
+Use `--help` to see all available flags and their corresponding environment variables.
 
 ## Usage
 

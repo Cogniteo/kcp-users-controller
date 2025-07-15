@@ -19,8 +19,9 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"flag"
 	"os"
+
+	"github.com/alecthomas/kingpin/v2"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -59,39 +60,27 @@ func init() {
 
 // nolint:gocyclo
 func main() {
-	var clientCertPath string
-	var clientKeyPath string
-	var caCertPath string
-	var virtualWorkspaceUrl string
-	var metricsAddr string
-	var enableLeaderElection bool
-	var probeAddr string
-	var enableHTTP2 bool
-	var cognitoUserPoolID string
-	var tlsOpts []func(*tls.Config)
-	flag.StringVar(&metricsAddr, "metrics-bind-address", "0",
-		"The address the metrics endpoint binds to. "+
-			"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.BoolVar(&enableHTTP2, "enable-http2", false,
-		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
-	flag.StringVar(&clientCertPath, "client-cert", "",
-		"Path to the client certificate (PEM format) for TLS authentication.")
-	flag.StringVar(&clientKeyPath, "client-key", "", "Path to the client key (PEM format) for TLS authentication.")
-	flag.StringVar(&caCertPath, "ca-cert", "", "Path to the CA certificate (PEM format) for TLS server verification.")
-	flag.StringVar(&virtualWorkspaceUrl, "virtual-workspace-url", "",
-		"The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). "+
-			"This will override the host in the kubeconfig.")
-	flag.StringVar(&cognitoUserPoolID, "cognito-user-pool-id", "",
-		"AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.")
+	var (
+		app = kingpin.New("kcp-users-controller", "A Kubernetes controller for managing KCP users through AWS Cognito integration")
+		metricsAddr = app.Flag("metrics-bind-address", "The address the metrics endpoint binds to. Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.").Envar("METRICS_BIND_ADDRESS").Default("0").String()
+		probeAddr = app.Flag("health-probe-bind-address", "The address the probe endpoint binds to.").Envar("HEALTH_PROBE_BIND_ADDRESS").Default(":8081").String()
+		enableLeaderElection = app.Flag("leader-elect", "Enable leader election for controller manager. Enabling this will ensure there is only one active controller manager.").Envar("LEADER_ELECT").Default("false").Bool()
+		enableHTTP2 = app.Flag("enable-http2", "If set, HTTP/2 will be enabled for the metrics and webhook servers.").Envar("ENABLE_HTTP2").Default("false").Bool()
+		clientCertPath = app.Flag("client-cert", "Path to the client certificate (PEM format) for TLS authentication.").Envar("CLIENT_CERT_PATH").String()
+		clientKeyPath = app.Flag("client-key", "Path to the client key (PEM format) for TLS authentication.").Envar("CLIENT_KEY_PATH").String()
+		caCertPath = app.Flag("ca-cert", "Path to the CA certificate (PEM format) for TLS server verification.").Envar("CA_CERT_PATH").String()
+		virtualWorkspaceUrl = app.Flag("virtual-workspace-url", "The URL of the virtual workspace (e.g., https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). This will override the host in the kubeconfig.").Envar("VIRTUAL_WORKSPACE_URL").String()
+		cognitoUserPoolID = app.Flag("cognito-user-pool-id", "AWS Cognito User Pool ID. If not provided, Cognito integration will be disabled.").Envar("COGNITO_USER_POOL_ID").String()
+		cognitoUserPoolName = app.Flag("cognito-user-pool-name", "AWS Cognito User Pool Name. If not provided, Cognito integration will be disabled.").Envar("COGNITO_USER_POOL_NAME").String()
+		// Zap logger flags
+		zapDevel = app.Flag("zap-devel", "Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn). Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error).").Envar("ZAP_DEVEL").Default("true").Bool()
+	)
+
+	kingpin.MustParse(app.Parse(os.Args[1:]))
+
 	opts := zap.Options{
-		Development: true,
+		Development: *zapDevel,
 	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -106,7 +95,8 @@ func main() {
 		c.NextProtos = []string{"http/1.1"}
 	}
 
-	if !enableHTTP2 {
+	var tlsOpts []func(*tls.Config)
+	if !*enableHTTP2 {
 		tlsOpts = append(tlsOpts, disableHTTP2)
 	}
 
@@ -119,26 +109,26 @@ func main() {
 	// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.21.0/pkg/metrics/server
 	// - https://book.kubebuilder.io/reference/metrics.html
 	metricsServerOptions := metricsserver.Options{
-		BindAddress: metricsAddr,
+		BindAddress: *metricsAddr,
 		TLSOpts:     tlsOpts,
 	}
 	cfg := ctrl.GetConfigOrDie()
 	cfg = rest.CopyConfig(cfg)
 
-	if virtualWorkspaceUrl != "" {
-		cfg.Host = virtualWorkspaceUrl
-		setupLog.Info("using virtual workspace URL for REST client", "url", virtualWorkspaceUrl)
+	if *virtualWorkspaceUrl != "" {
+		cfg.Host = *virtualWorkspaceUrl
+		setupLog.Info("using virtual workspace URL for REST client", "url", *virtualWorkspaceUrl)
 	}
 
 	// TLS authentication for REST client
-	if clientCertPath != "" {
-		cfg.CertFile = clientCertPath
+	if *clientCertPath != "" {
+		cfg.CertFile = *clientCertPath
 	}
-	if clientKeyPath != "" {
-		cfg.KeyFile = clientKeyPath
+	if *clientKeyPath != "" {
+		cfg.KeyFile = *clientKeyPath
 	}
-	if caCertPath != "" {
-		cfg.CAFile = caCertPath
+	if *caCertPath != "" {
+		cfg.CAFile = *caCertPath
 	}
 
 	provider, err := apiexport.New(cfg, apiexport.Options{
@@ -153,8 +143,8 @@ func main() {
 		Scheme:                 clientgoscheme.Scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         enableLeaderElection,
+		HealthProbeBindAddress: *probeAddr,
+		LeaderElection:         *enableLeaderElection,
 		LeaderElectionID:       "fe9d2d78.cogniteo.io",
 	})
 	if err != nil {
@@ -162,18 +152,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Initialize Cognito client if User Pool ID is provided
+	// Initialize Cognito client if User Pool ID or Name is provided
 	var userPoolClient userpool.Client
-	if cognitoUserPoolID != "" {
-		setupLog.Info("Initializing AWS Cognito client", "userPoolId", cognitoUserPoolID)
-		client, err := cognito.NewClient(context.Background(), cognitoUserPoolID)
+	if *cognitoUserPoolID != "" && *cognitoUserPoolName != "" {
+		setupLog.Error(nil, "both cognito-user-pool-id and cognito-user-pool-name provided, please specify only one")
+		os.Exit(1)
+	} else if *cognitoUserPoolID != "" {
+		setupLog.Info("Initializing AWS Cognito client", "userPoolId", *cognitoUserPoolID)
+		client, err := cognito.NewClient(context.Background(), *cognitoUserPoolID)
+		if err != nil {
+			setupLog.Error(err, "unable to create Cognito client")
+			os.Exit(1)
+		}
+		userPoolClient = client
+	} else if *cognitoUserPoolName != "" {
+		setupLog.Info("Initializing AWS Cognito client", "userPoolName", *cognitoUserPoolName)
+		client, err := cognito.NewClientByName(context.Background(), *cognitoUserPoolName)
 		if err != nil {
 			setupLog.Error(err, "unable to create Cognito client")
 			os.Exit(1)
 		}
 		userPoolClient = client
 	} else {
-		setupLog.Info("Cognito User Pool ID not provided, Cognito integration disabled")
+		setupLog.Info("Cognito User Pool ID or Name not provided, Cognito integration disabled")
 	}
 
 	if err := (&controller.UserReconciler{
