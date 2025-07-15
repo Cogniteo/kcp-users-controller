@@ -116,8 +116,8 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) error {
 	if user == nil {
 		return fmt.Errorf("user cannot be nil")
 	}
-	if user.Username == "" {
-		return fmt.Errorf("username cannot be empty")
+	if user.Email == "" {
+		return fmt.Errorf("email cannot be empty")
 	}
 
 	attributes := []types.AttributeType{
@@ -133,19 +133,14 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) error {
 
 	input := &cognitoidentityprovider.AdminCreateUserInput{
 		UserPoolId:     aws.String(c.userPoolID),
-		Username:       aws.String(user.Username),
+		Username:       aws.String(user.Email),
 		UserAttributes: attributes,
 		MessageAction:  types.MessageActionTypeSuppress, // Don't send welcome email
 	}
 
-	// User will be enabled by default, we'll handle disabling separately if needed
-	if !user.Enabled {
-		input.TemporaryPassword = aws.String("TempPass123!")
-	}
-
 	_, err := c.cognito.AdminCreateUser(ctx, input)
 	if err != nil {
-		return fmt.Errorf("failed to create user %s: %w", user.Username, err)
+		return fmt.Errorf("failed to create user %s: %w", user.Email, err)
 	}
 
 	return nil
