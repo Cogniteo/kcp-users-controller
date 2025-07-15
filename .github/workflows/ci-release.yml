@@ -24,6 +24,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
@@ -41,6 +42,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Run tests
         run: |
@@ -90,6 +92,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
+          cache: true
 
       - name: Build and load Docker image
         if: steps.list-changed.outputs.changed == 'true'
@@ -168,6 +171,12 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           file: ./Dockerfile
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache,mode=max
 
   push-tag:
     name: Push version tag
