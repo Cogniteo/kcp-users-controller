@@ -26,6 +26,7 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} \
 FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=builder /workspace/manager .
+# Ensure we're running as non-root user (65532 is the nonroot user in distroless)
 USER 65532:65532
 
 ENTRYPOINT ["/manager"]
