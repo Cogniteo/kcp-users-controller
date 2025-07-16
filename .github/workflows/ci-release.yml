@@ -144,7 +144,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/Cogniteo/kcp-users-controller
+          images: ghcr.io/cogniteo/kcp-users-controller
           tags: |
             type=raw,value=${{ needs.version.outputs.version_tag }}
             type=raw,value=latest
@@ -171,6 +171,13 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           file: ./Dockerfile
+          cache-from: |
+            type=gha
+            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache,mode=max
+          
 
 
   push-tag:
@@ -231,7 +238,7 @@ jobs:
 
       - name: Push Helm chart to GitHub Container Registry
         run: |
-          helm push kcp-users-controller-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo
+          helm push kcp-users-controller-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo/helm-charts
           
   create-release:
     name: Create GitHub Release
@@ -267,9 +274,9 @@ jobs:
             ${{ steps.changelog.outputs.changelog }}
 
             ## Docker Image
-            `ghcr.io/Cogniteo/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
+            `ghcr.io/cogniteo/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
 
             ## Helm Chart
-            `oci://ghcr.io/cogniteo/users:${{ needs.version.outputs.version_tag }}`
+            `oci://ghcr.io/cogniteo/helm-charts/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
           draft: false
           prerelease: false
