@@ -171,12 +171,7 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           file: ./Dockerfile
-          cache-from: |
-            type=gha
-            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=ghcr.io/cogniteo/kcp-users-controller:cache,mode=max
+
 
   push-tag:
     name: Push version tag
