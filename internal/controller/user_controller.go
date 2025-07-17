@@ -85,7 +85,8 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		}
 		
 		// Remove finalizer
-		user.ObjectMeta.Finalizers = removeFinalizer(user.ObjectMeta.Finalizers, finalizerName)
+		user.ObjectMeta.Finalizers = removeFinalizer(user.ObjectMeta.Finalizers,
+			finalizerName)
 		if err := clusterClient.Update(ctx, &user); err != nil {
 			log.Error(err, "Failed to remove finalizer")
 			return ctrl.Result{}, err
@@ -94,8 +95,10 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 
 	// Add finalizer if not present
-	if !containsFinalizer(user.ObjectMeta.Finalizers, finalizerName) {
-		user.ObjectMeta.Finalizers = append(user.ObjectMeta.Finalizers, finalizerName)
+	if !containsFinalizer(user.ObjectMeta.Finalizers,
+		finalizerName) {
+		user.ObjectMeta.Finalizers = append(user.ObjectMeta.Finalizers,
+			finalizerName)
 		if err := clusterClient.Update(ctx, &user); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
@@ -132,7 +135,8 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 }
 
 // syncUserWithUserPool synchronizes a Kubernetes User with User Pool
-func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1alpha1.User, log logr.Logger) error {
+func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1alpha1.User,
+	log logr.Logger) error {
 	poolUser := &userpool.User{
 		Username: user.Name,
 		Email:    user.Spec.Email,
@@ -158,7 +162,8 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		if err != nil {
 			return fmt.Errorf("failed to create user in user pool: %w", err)
 		}
-		log.Info("User created in user pool", "username", user.Name, "sub", createdUser.Sub)
+		log.Info("User created in user pool",
+			"username", user.Name, "sub", createdUser.Sub)
 		
 		// Update the status with the sub
 		user.Status.Sub = createdUser.Sub
@@ -167,7 +172,8 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		user.Status.LastSyncTime = &now
 	} else {
 		// User exists, check if update is needed
-		if existingUser.Email != poolUser.Email || existingUser.Enabled != poolUser.Enabled {
+		if existingUser.Email != poolUser.Email ||
+			existingUser.Enabled != poolUser.Enabled {
 			log.Info("Updating user in user pool", "username", user.Name)
 			if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
 				return fmt.Errorf("failed to update user in user pool: %w", err)
@@ -175,7 +181,8 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 			log.Info("User updated in user pool", "username", user.Name)
 		} else {
 			// User exists and is up to date
-			log.Info("User already exists in user pool and is up to date", "username", user.Name)
+			log.Info("User already exists in user pool and is up to date",
+				"username", user.Name)
 		}
 		
 		// Update the status with sync time
@@ -190,29 +197,34 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 }
 
 // deleteUserFromUserPool safely deletes a user from the user pool with appropriate logging
-func (r *UserReconciler) deleteUserFromUserPool(ctx context.Context, username string, sub string, log logr.Logger) {
+func (r *UserReconciler) deleteUserFromUserPool(ctx context.Context, username string, sub string,
+	log logr.Logger) {
 	// Determine what identifier to use for deletion
 	identifier := sub
 	if identifier == "" {
 		// Fallback to username if sub is not available
 		identifier = username
-		log.Info("No sub available, using username for deletion", "username", username)
+		log.Info("No sub available, using username for deletion",
+			"username", username)
 	}
 
 	// Check if user exists first
 	_, err := r.UserPoolClient.GetUser(ctx, identifier)
 	if err != nil {
 		// User doesn't exist in user pool
-		log.Info("User not found in user pool, nothing to delete", "username", username, "identifier", identifier)
+		log.Info("User not found in user pool, nothing to delete",
+			"username", username, "identifier", identifier)
 		return
 	}
 
 	// User exists, proceed with deletion
 	if err := r.UserPoolClient.DeleteUser(ctx, identifier); err != nil {
-		log.Error(err, "Failed to delete user from user pool", "username", username, "identifier", identifier)
+		log.Error(err, "Failed to delete user from user pool",
+			"username", username, "identifier", identifier)
 		// Continue with reconciliation even if user pool deletion fails
 	} else {
-		log.Info("User deleted from user pool", "username", username, "identifier", identifier)
+		log.Info("User deleted from user pool",
+			"username", username, "identifier", identifier)
 	}
 }
 
