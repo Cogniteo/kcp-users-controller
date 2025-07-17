@@ -18,6 +18,7 @@ package cognito
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -112,12 +113,12 @@ func findUserPoolIDByName(ctx context.Context, cognito *cognitoidentityprovider.
 }
 
 // CreateUser creates a new user in the Cognito user pool
-func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) error {
+func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) (*userpool.User, error) {
 	if user == nil {
-		return fmt.Errorf("user cannot be nil")
+		return nil, fmt.Errorf("user cannot be nil")
 	}
 	if user.Email == "" {
-		return fmt.Errorf("email cannot be empty")
+		return nil, fmt.Errorf("email cannot be empty")
 	}
 
 	attributes := []types.AttributeType{
@@ -138,12 +139,31 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) error {
 		MessageAction:  types.MessageActionTypeSuppress, // Don't send welcome email
 	}
 
-	_, err := c.cognito.AdminCreateUser(ctx, input)
+	resp, err := c.cognito.AdminCreateUser(ctx, input)
 	if err != nil {
-		return fmt.Errorf("failed to create user %s: %w", user.Email, err)
+		// Check if the error is due to user already existing
+		var userExistsErr *types.UsernameExistsException
+		if errors.As(err, &userExistsErr) {
+			// User already exists, get the existing user info
+			return c.GetUser(ctx, user.Email)
+		}
+		return nil, fmt.Errorf("failed to create user %s: %w", user.Email, err)
 	}
 
-	return nil
+	// Extract the sub from the response
+	createdUser := &userpool.User{
+		Username: user.Username,
+		Email:    user.Email,
+		Enabled:  user.Enabled,
+		Sub:      user.Email, // In Cognito, the username is the sub by default
+	}
+
+	// If the response contains user attributes, extract the sub
+	if resp.User != nil && resp.User.Username != nil {
+		createdUser.Sub = *resp.User.Username
+	}
+
+	return createdUser, nil
 }
 
 // GetUser retrieves a user from the Cognito user pool by username
@@ -165,6 +185,7 @@ func (c *AWSClient) GetUser(ctx context.Context, username string) (*userpool.Use
 	user := &userpool.User{
 		Username: username,
 		Enabled:  output.Enabled,
+		Sub:      username, // The username is the sub in Cognito
 	}
 
 	// Extract email from user attributes
@@ -243,6 +264,12 @@ func (c *AWSClient) DeleteUser(ctx context.Context, username string) error {
 
 	_, err := c.cognito.AdminDeleteUser(ctx, input)
 	if err != nil {
+		// Check if the error is due to user not existing
+		var userNotFoundErr *types.UserNotFoundException
+		if errors.As(err, &userNotFoundErr) {
+			// User doesn't exist, this is not an error for deletion
+			return nil
+		}
 		return fmt.Errorf("failed to delete user %s: %w", username, err)
 	}
 

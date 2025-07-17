@@ -34,8 +34,17 @@ type UserSpec struct {
 
 // UserStatus defines the observed state of User.
 type UserStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// Sub is the user's unique identifier (subject) in the user pool
+	Sub string `json:"sub,omitempty"`
+	
+	// UserPoolStatus represents the current status of the user in the user pool
+	UserPoolStatus string `json:"userPoolStatus,omitempty"`
+	
+	// LastSyncTime is the timestamp of the last successful sync with the user pool
+	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
+	
+	// Conditions represent the current service state of the User
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true

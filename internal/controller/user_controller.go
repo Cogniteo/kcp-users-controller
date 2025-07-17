@@ -69,18 +69,36 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	clusterClient := cl.GetClient()
 	if err := clusterClient.Get(ctx, req.NamespacedName, &user); err != nil {
 		if errors.IsNotFound(err) {
-			// User was deleted, remove from user pool
-			if r.UserPoolClient != nil {
-				if err := r.UserPoolClient.DeleteUser(ctx, req.Name); err != nil {
-					log.Error(err, "Failed to delete user from user pool", "username", req.Name)
-					// Continue with reconciliation even if user pool deletion fails
-				} else {
-					log.Info("User deleted from user pool", "username", req.Name)
-				}
-			}
+			// User was deleted, no action needed as finalizer should have handled cleanup
 			return ctrl.Result{}, nil
 		}
 		return ctrl.Result{}, err
+	}
+
+	// Handle finalizer for cleanup before deletion
+	finalizerName := "kcp.cogniteo.io/user-pool-cleanup"
+	if user.ObjectMeta.DeletionTimestamp != nil {
+		// User is being deleted, run cleanup
+		if r.UserPoolClient != nil {
+			r.deleteUserFromUserPool(ctx, user.Name, user.Status.Sub, log)
+		}
+		
+		// Remove finalizer
+		user.ObjectMeta.Finalizers = removeFinalizer(user.ObjectMeta.Finalizers, finalizerName)
+		if err := clusterClient.Update(ctx, &user); err != nil {
+			log.Error(err, "Failed to remove finalizer")
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
+	// Add finalizer if not present
+	if !containsFinalizer(user.ObjectMeta.Finalizers, finalizerName) {
+		user.ObjectMeta.Finalizers = append(user.ObjectMeta.Finalizers, finalizerName)
+		if err := clusterClient.Update(ctx, &user); err != nil {
+			log.Error(err, "Failed to add finalizer")
+			return ctrl.Result{}, err
+		}
 	}
 
 	// Sync user with user pool
@@ -97,8 +115,15 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 	user.Annotations["kcp.cogniteo.io/lastReconciledAt"] = time.Now().Format(time.RFC3339)
 
+	// Update the resource with both spec and status
 	if err := clusterClient.Update(ctx, &user); err != nil {
-		log.Error(err, "Failed to update User annotation")
+		log.Error(err, "Failed to update User")
+		return ctrl.Result{}, err
+	}
+
+	// Update the status subresource
+	if err := clusterClient.Status().Update(ctx, &user); err != nil {
+		log.Error(err, "Failed to update User status")
 		return ctrl.Result{}, err
 	}
 
@@ -113,27 +138,102 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		Enabled:  user.Spec.Enabled,
 	}
 
-	// Check if user exists in user pool
-	existingUser, err := r.UserPoolClient.GetUser(ctx, user.Name)
+	// Check if user exists in user pool (use sub from status if available)
+	var existingUser *userpool.User
+	var err error
+	
+	if user.Status.Sub != "" {
+		// Use stored sub to check if user exists
+		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub)
+	} else {
+		// Fallback to using email as identifier
+		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Spec.Email)
+	}
+	
 	if err != nil {
 		// User doesn't exist, create it
 		log.Info("Creating user in user pool", "username", user.Name)
-		if err := r.UserPoolClient.CreateUser(ctx, poolUser); err != nil {
+		createdUser, err := r.UserPoolClient.CreateUser(ctx, poolUser)
+		if err != nil {
 			return fmt.Errorf("failed to create user in user pool: %w", err)
 		}
-		log.Info("User created in user pool", "username", user.Name)
+		log.Info("User created in user pool", "username", user.Name, "sub", createdUser.Sub)
+		
+		// Update the status with the sub
+		user.Status.Sub = createdUser.Sub
+		user.Status.UserPoolStatus = "CONFIRMED"
+		now := metav1.Now()
+		user.Status.LastSyncTime = &now
 	} else {
-		// User exists, update if needed
+		// User exists, check if update is needed
 		if existingUser.Email != poolUser.Email || existingUser.Enabled != poolUser.Enabled {
 			log.Info("Updating user in user pool", "username", user.Name)
 			if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
 				return fmt.Errorf("failed to update user in user pool: %w", err)
 			}
 			log.Info("User updated in user pool", "username", user.Name)
+		} else {
+			// User exists and is up to date
+			log.Info("User already exists in user pool and is up to date", "username", user.Name)
+		}
+		
+		// Update the status with sync time
+		now := metav1.Now()
+		user.Status.LastSyncTime = &now
+		if user.Status.Sub == "" {
+			user.Status.Sub = existingUser.Sub
 		}
 	}
 
 	return nil
+}
+
+// deleteUserFromUserPool safely deletes a user from the user pool with appropriate logging
+func (r *UserReconciler) deleteUserFromUserPool(ctx context.Context, username string, sub string, log logr.Logger) {
+	// Determine what identifier to use for deletion
+	identifier := sub
+	if identifier == "" {
+		// Fallback to username if sub is not available
+		identifier = username
+		log.Info("No sub available, using username for deletion", "username", username)
+	}
+
+	// Check if user exists first
+	_, err := r.UserPoolClient.GetUser(ctx, identifier)
+	if err != nil {
+		// User doesn't exist in user pool
+		log.Info("User not found in user pool, nothing to delete", "username", username, "identifier", identifier)
+		return
+	}
+
+	// User exists, proceed with deletion
+	if err := r.UserPoolClient.DeleteUser(ctx, identifier); err != nil {
+		log.Error(err, "Failed to delete user from user pool", "username", username, "identifier", identifier)
+		// Continue with reconciliation even if user pool deletion fails
+	} else {
+		log.Info("User deleted from user pool", "username", username, "identifier", identifier)
+	}
+}
+
+// containsFinalizer checks if a finalizer is present in the list
+func containsFinalizer(finalizers []string, finalizer string) bool {
+	for _, f := range finalizers {
+		if f == finalizer {
+			return true
+		}
+	}
+	return false
+}
+
+// removeFinalizer removes a finalizer from the list
+func removeFinalizer(finalizers []string, finalizer string) []string {
+	result := []string{}
+	for _, f := range finalizers {
+		if f != finalizer {
+			result = append(result, f)
+		}
+	}
+	return result
 }
 
 // SetupWithManager sets up the controller with the Manager.

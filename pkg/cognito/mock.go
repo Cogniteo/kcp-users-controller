@@ -36,27 +36,29 @@ func NewMockClient() *MockClient {
 }
 
 // CreateUser creates a new user in the mock store
-func (m *MockClient) CreateUser(ctx context.Context, user *userpool.User) error {
+func (m *MockClient) CreateUser(ctx context.Context, user *userpool.User) (*userpool.User, error) {
 	if user == nil {
-		return fmt.Errorf("user cannot be nil")
+		return nil, fmt.Errorf("user cannot be nil")
 	}
 	if user.Username == "" {
-		return fmt.Errorf("username cannot be empty")
+		return nil, fmt.Errorf("username cannot be empty")
 	}
 
 	// Check if user already exists
-	if _, exists := m.users[user.Username]; exists {
-		return fmt.Errorf("user %s already exists", user.Username)
+	if existingUser, exists := m.users[user.Username]; exists {
+		return existingUser, nil
 	}
 
 	// Create a copy to avoid reference issues
-	m.users[user.Username] = &userpool.User{
+	createdUser := &userpool.User{
 		Username: user.Username,
 		Email:    user.Email,
 		Enabled:  user.Enabled,
+		Sub:      user.Username, // Mock uses username as sub
 	}
+	m.users[user.Username] = createdUser
 
-	return nil
+	return createdUser, nil
 }
 
 // GetUser retrieves a user from the mock store
@@ -75,6 +77,7 @@ func (m *MockClient) GetUser(ctx context.Context, username string) (*userpool.Us
 		Username: user.Username,
 		Email:    user.Email,
 		Enabled:  user.Enabled,
+		Sub:      user.Sub,
 	}, nil
 }
 

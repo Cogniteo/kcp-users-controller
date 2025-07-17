@@ -25,12 +25,13 @@ type User struct {
 	Username string
 	Email    string
 	Enabled  bool
+	Sub      string // The unique identifier (subject) of the user in the pool
 }
 
 // Client defines the interface for managing users in a user pool
 type Client interface {
-	// CreateUser creates a new user in the user pool
-	CreateUser(ctx context.Context, user *User) error
+	// CreateUser creates a new user in the user pool and returns the created user info
+	CreateUser(ctx context.Context, user *User) (*User, error)
 
 	// GetUser retrieves a user from the user pool by username
 	GetUser(ctx context.Context, username string) (*User, error)
