@@ -4,7 +4,6 @@ controllerManager:
   container:
     image:
       repository: ghcr.io/cogniteo/kcp-users-controller
-      tag: latest
     args:
       - "--leader-elect"
       - "--metrics-bind-address=:8443"
