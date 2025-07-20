@@ -78,14 +78,14 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 
 	// Handle finalizer for cleanup before deletion
 	finalizerName := "kcp.cogniteo.io/user-pool-cleanup"
-	if user.ObjectMeta.DeletionTimestamp != nil {
+	if user.DeletionTimestamp != nil {
 		// User is being deleted, run cleanup
 		if r.UserPoolClient != nil {
 			r.deleteUserFromUserPool(ctx, user.Name, user.Status.Sub, log)
 		}
-		
+
 		// Remove finalizer
-		user.ObjectMeta.Finalizers = removeFinalizer(user.ObjectMeta.Finalizers,
+		user.Finalizers = removeFinalizer(user.Finalizers,
 			finalizerName)
 		if err := clusterClient.Update(ctx, &user); err != nil {
 			log.Error(err, "Failed to remove finalizer")
@@ -95,9 +95,9 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 
 	// Add finalizer if not present
-	if !containsFinalizer(user.ObjectMeta.Finalizers,
+	if !containsFinalizer(user.Finalizers,
 		finalizerName) {
-		user.ObjectMeta.Finalizers = append(user.ObjectMeta.Finalizers,
+		user.Finalizers = append(user.Finalizers,
 			finalizerName)
 		if err := clusterClient.Update(ctx, &user); err != nil {
 			log.Error(err, "Failed to add finalizer")
@@ -146,7 +146,7 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 	// Check if user exists in user pool (use sub from status if available)
 	var existingUser *userpool.User
 	var err error
-	
+
 	if user.Status.Sub != "" {
 		// Use stored sub to check if user exists
 		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub)
@@ -154,7 +154,7 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		// Fallback to using email as identifier
 		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Spec.Email)
 	}
-	
+
 	if err != nil {
 		// User doesn't exist, create it
 		log.Info("Creating user in user pool", "username", user.Name)
@@ -164,7 +164,7 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		}
 		log.Info("User created in user pool",
 			"username", user.Name, "sub", createdUser.Sub)
-		
+
 		// Update the status with the sub
 		user.Status.Sub = createdUser.Sub
 		user.Status.UserPoolStatus = "CONFIRMED"
@@ -184,7 +184,7 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 			log.Info("User already exists in user pool and is up to date",
 				"username", user.Name)
 		}
-		
+
 		// Update the status with sync time
 		now := metav1.Now()
 		user.Status.LastSyncTime = &now

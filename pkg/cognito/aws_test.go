@@ -48,22 +48,24 @@ func TestAWSClient_CreateUser(t *testing.T) {
 				Enabled:  true,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminCreateUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).Return(&cognitoidentityprovider.AdminCreateUserOutput{
-					User: &types.UserType{
-						Username: aws.String("test@example.com"),
-						Enabled:  true,
-						Attributes: []types.AttributeType{
-							{
-								Name:  aws.String("sub"),
-								Value: aws.String("test-sub-123"),
-							},
-							{
-								Name:  aws.String("email"),
-								Value: aws.String("test@example.com"),
+				mockAPI.On("AdminCreateUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).
+					Return(&cognitoidentityprovider.AdminCreateUserOutput{
+						User: &types.UserType{
+							Username: aws.String("test@example.com"),
+							Enabled:  true,
+							Attributes: []types.AttributeType{
+								{
+									Name:  aws.String("sub"),
+									Value: aws.String("test-sub-123"),
+								},
+								{
+									Name:  aws.String("email"),
+									Value: aws.String("test@example.com"),
+								},
 							},
 						},
-					},
-				}, nil)
+					}, nil)
 			},
 			expectErr: false,
 			expected: &userpool.User{
@@ -84,19 +86,22 @@ func TestAWSClient_CreateUser(t *testing.T) {
 				userExistsErr := &types.UsernameExistsException{
 					Message: aws.String("User already exists"),
 				}
-				mockAPI.On("AdminCreateUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).Return(nil, userExistsErr)
-				
+				mockAPI.On("AdminCreateUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).Return(nil, userExistsErr)
+
 				// Mock the GetUser call when user already exists
-				mockAPI.On("AdminGetUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).Return(&cognitoidentityprovider.AdminGetUserOutput{
-					Username: aws.String("test@example.com"),
-					Enabled:  true,
-					UserAttributes: []types.AttributeType{
-						{
-							Name:  aws.String("email"),
-							Value: aws.String("test@example.com"),
+				mockAPI.On("AdminGetUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).
+					Return(&cognitoidentityprovider.AdminGetUserOutput{
+						Username: aws.String("test@example.com"),
+						Enabled:  true,
+						UserAttributes: []types.AttributeType{
+							{
+								Name:  aws.String("email"),
+								Value: aws.String("test@example.com"),
+							},
 						},
-					},
-				}, nil)
+					}, nil)
 			},
 			expectErr: false,
 			expected: &userpool.User{
@@ -136,7 +141,9 @@ func TestAWSClient_CreateUser(t *testing.T) {
 				Enabled:  true,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminCreateUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).Return(nil, errors.New("AWS error"))
+				mockAPI.On("AdminCreateUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminCreateUserInput")).
+					Return(nil, errors.New("AWS error"))
 			},
 			expectErr: true,
 			expected:  nil,
@@ -178,16 +185,18 @@ func TestAWSClient_GetUser(t *testing.T) {
 			name:     "successful user retrieval",
 			username: "test@example.com",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminGetUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).Return(&cognitoidentityprovider.AdminGetUserOutput{
-					Username: aws.String("test@example.com"),
-					Enabled:  true,
-					UserAttributes: []types.AttributeType{
-						{
-							Name:  aws.String("email"),
-							Value: aws.String("test@example.com"),
+				mockAPI.On("AdminGetUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).
+					Return(&cognitoidentityprovider.AdminGetUserOutput{
+						Username: aws.String("test@example.com"),
+						Enabled:  true,
+						UserAttributes: []types.AttributeType{
+							{
+								Name:  aws.String("email"),
+								Value: aws.String("test@example.com"),
+							},
 						},
-					},
-				}, nil)
+					}, nil)
 			},
 			expectErr: false,
 			expected: &userpool.User{
@@ -210,7 +219,9 @@ func TestAWSClient_GetUser(t *testing.T) {
 			name:     "user not found",
 			username: "nonexistent@example.com",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminGetUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).Return(nil, errors.New("user not found"))
+				mockAPI.On("AdminGetUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminGetUserInput")).
+					Return(nil, errors.New("user not found"))
 			},
 			expectErr: true,
 			expected:  nil,
@@ -255,8 +266,12 @@ func TestAWSClient_UpdateUser(t *testing.T) {
 				Enabled:  true,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminUpdateUserAttributes", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
-				mockAPI.On("AdminEnableUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminEnableUserInput")).Return(&cognitoidentityprovider.AdminEnableUserOutput{}, nil)
+				mockAPI.On("AdminUpdateUserAttributes", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).
+					Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
+				mockAPI.On("AdminEnableUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminEnableUserInput")).
+					Return(&cognitoidentityprovider.AdminEnableUserOutput{}, nil)
 			},
 			expectErr: false,
 		},
@@ -268,8 +283,12 @@ func TestAWSClient_UpdateUser(t *testing.T) {
 				Enabled:  false,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminUpdateUserAttributes", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
-				mockAPI.On("AdminDisableUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminDisableUserInput")).Return(&cognitoidentityprovider.AdminDisableUserOutput{}, nil)
+				mockAPI.On("AdminUpdateUserAttributes", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).
+					Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
+				mockAPI.On("AdminDisableUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminDisableUserInput")).
+					Return(&cognitoidentityprovider.AdminDisableUserOutput{}, nil)
 			},
 			expectErr: false,
 		},
@@ -301,7 +320,9 @@ func TestAWSClient_UpdateUser(t *testing.T) {
 				Enabled:  true,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminUpdateUserAttributes", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).Return(nil, errors.New("update failed"))
+				mockAPI.On("AdminUpdateUserAttributes", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).
+					Return(nil, errors.New("update failed"))
 			},
 			expectErr: true,
 		},
@@ -313,8 +334,12 @@ func TestAWSClient_UpdateUser(t *testing.T) {
 				Enabled:  true,
 			},
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminUpdateUserAttributes", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
-				mockAPI.On("AdminEnableUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminEnableUserInput")).Return(nil, errors.New("enable failed"))
+				mockAPI.On("AdminUpdateUserAttributes", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminUpdateUserAttributesInput")).
+					Return(&cognitoidentityprovider.AdminUpdateUserAttributesOutput{}, nil)
+				mockAPI.On("AdminEnableUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminEnableUserInput")).
+					Return(nil, errors.New("enable failed"))
 			},
 			expectErr: true,
 		},
@@ -352,7 +377,9 @@ func TestAWSClient_DeleteUser(t *testing.T) {
 			name:     "successful user deletion",
 			username: "test@example.com",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminDeleteUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).Return(&cognitoidentityprovider.AdminDeleteUserOutput{}, nil)
+				mockAPI.On("AdminDeleteUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).
+					Return(&cognitoidentityprovider.AdminDeleteUserOutput{}, nil)
 			},
 			expectErr: false,
 		},
@@ -363,7 +390,9 @@ func TestAWSClient_DeleteUser(t *testing.T) {
 				userNotFoundErr := &types.UserNotFoundException{
 					Message: aws.String("User not found"),
 				}
-				mockAPI.On("AdminDeleteUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).Return(nil, userNotFoundErr)
+				mockAPI.On("AdminDeleteUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).
+					Return(nil, userNotFoundErr)
 			},
 			expectErr: false,
 		},
@@ -379,7 +408,9 @@ func TestAWSClient_DeleteUser(t *testing.T) {
 			name:     "AWS error during deletion",
 			username: "test@example.com",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("AdminDeleteUser", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).Return(nil, errors.New("AWS error"))
+				mockAPI.On("AdminDeleteUser", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.AdminDeleteUserInput")).
+					Return(nil, errors.New("AWS error"))
 			},
 			expectErr: true,
 		},
@@ -416,31 +447,33 @@ func TestAWSClient_ListUsers(t *testing.T) {
 		{
 			name: "successful user listing - single page",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUsers", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).Return(&cognitoidentityprovider.ListUsersOutput{
-					Users: []types.UserType{
-						{
-							Username: aws.String("user1@example.com"),
-							Enabled:  true,
-							Attributes: []types.AttributeType{
-								{
-									Name:  aws.String("email"),
-									Value: aws.String("user1@example.com"),
+				mockAPI.On("ListUsers", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).
+					Return(&cognitoidentityprovider.ListUsersOutput{
+						Users: []types.UserType{
+							{
+								Username: aws.String("user1@example.com"),
+								Enabled:  true,
+								Attributes: []types.AttributeType{
+									{
+										Name:  aws.String("email"),
+										Value: aws.String("user1@example.com"),
+									},
+								},
+							},
+							{
+								Username: aws.String("user2@example.com"),
+								Enabled:  false,
+								Attributes: []types.AttributeType{
+									{
+										Name:  aws.String("email"),
+										Value: aws.String("user2@example.com"),
+									},
 								},
 							},
 						},
-						{
-							Username: aws.String("user2@example.com"),
-							Enabled:  false,
-							Attributes: []types.AttributeType{
-								{
-									Name:  aws.String("email"),
-									Value: aws.String("user2@example.com"),
-								},
-							},
-						},
-					},
-					PaginationToken: nil,
-				}, nil)
+						PaginationToken: nil,
+					}, nil)
 			},
 			expectErr: false,
 			expected: []*userpool.User{
@@ -514,7 +547,9 @@ func TestAWSClient_ListUsers(t *testing.T) {
 		{
 			name: "AWS error during listing",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUsers", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).Return(nil, errors.New("AWS error"))
+				mockAPI.On("ListUsers", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).
+					Return(nil, errors.New("AWS error"))
 			},
 			expectErr: true,
 			expected:  nil,
@@ -522,10 +557,12 @@ func TestAWSClient_ListUsers(t *testing.T) {
 		{
 			name: "empty user list",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUsers", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).Return(&cognitoidentityprovider.ListUsersOutput{
-					Users:           []types.UserType{},
-					PaginationToken: nil,
-				}, nil)
+				mockAPI.On("ListUsers", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUsersInput")).
+					Return(&cognitoidentityprovider.ListUsersOutput{
+						Users:           []types.UserType{},
+						PaginationToken: nil,
+					}, nil)
 			},
 			expectErr: false,
 			expected:  nil, // Change to nil to match actual implementation behavior
@@ -571,19 +608,21 @@ func TestFindUserPoolIDByName(t *testing.T) {
 			name:         "successful user pool found - single page",
 			userPoolName: "test-pool",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUserPools", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).Return(&cognitoidentityprovider.ListUserPoolsOutput{
-					UserPools: []types.UserPoolDescriptionType{
-						{
-							Id:   aws.String("pool-id-1"),
-							Name: aws.String("other-pool"),
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).
+					Return(&cognitoidentityprovider.ListUserPoolsOutput{
+						UserPools: []types.UserPoolDescriptionType{
+							{
+								Id:   aws.String("pool-id-1"),
+								Name: aws.String("other-pool"),
+							},
+							{
+								Id:   aws.String("pool-id-2"),
+								Name: aws.String("test-pool"),
+							},
 						},
-						{
-							Id:   aws.String("pool-id-2"),
-							Name: aws.String("test-pool"),
-						},
-					},
-					NextToken: nil,
-				}, nil)
+						NextToken: nil,
+					}, nil)
 			},
 			expectErr: false,
 			expected:  "pool-id-2",
@@ -592,15 +631,17 @@ func TestFindUserPoolIDByName(t *testing.T) {
 			name:         "successful user pool found - case insensitive",
 			userPoolName: "Test-Pool",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUserPools", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).Return(&cognitoidentityprovider.ListUserPoolsOutput{
-					UserPools: []types.UserPoolDescriptionType{
-						{
-							Id:   aws.String("pool-id-1"),
-							Name: aws.String("test-pool"),
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).
+					Return(&cognitoidentityprovider.ListUserPoolsOutput{
+						UserPools: []types.UserPoolDescriptionType{
+							{
+								Id:   aws.String("pool-id-1"),
+								Name: aws.String("test-pool"),
+							},
 						},
-					},
-					NextToken: nil,
-				}, nil)
+						NextToken: nil,
+					}, nil)
 			},
 			expectErr: false,
 			expected:  "pool-id-1",
@@ -609,15 +650,17 @@ func TestFindUserPoolIDByName(t *testing.T) {
 			name:         "user pool not found",
 			userPoolName: "nonexistent-pool",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUserPools", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).Return(&cognitoidentityprovider.ListUserPoolsOutput{
-					UserPools: []types.UserPoolDescriptionType{
-						{
-							Id:   aws.String("pool-id-1"),
-							Name: aws.String("other-pool"),
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).
+					Return(&cognitoidentityprovider.ListUserPoolsOutput{
+						UserPools: []types.UserPoolDescriptionType{
+							{
+								Id:   aws.String("pool-id-1"),
+								Name: aws.String("other-pool"),
+							},
 						},
-					},
-					NextToken: nil,
-				}, nil)
+						NextToken: nil,
+					}, nil)
 			},
 			expectErr: true,
 			expected:  "",
@@ -626,7 +669,9 @@ func TestFindUserPoolIDByName(t *testing.T) {
 			name:         "AWS error during listing",
 			userPoolName: "test-pool",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
-				mockAPI.On("ListUserPools", mock.Anything, mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).Return(nil, errors.New("AWS error"))
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.AnythingOfType("*cognitoidentityprovider.ListUserPoolsInput")).
+					Return(nil, errors.New("AWS error"))
 			},
 			expectErr: true,
 			expected:  "",
@@ -636,9 +681,10 @@ func TestFindUserPoolIDByName(t *testing.T) {
 			userPoolName: "test-pool",
 			setupMocks: func(mockAPI *mocks.MockCognitoAPI) {
 				// First page
-				mockAPI.On("ListUserPools", mock.Anything, mock.MatchedBy(func(input *cognitoidentityprovider.ListUserPoolsInput) bool {
-					return input.NextToken == nil
-				})).Return(&cognitoidentityprovider.ListUserPoolsOutput{
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.MatchedBy(func(input *cognitoidentityprovider.ListUserPoolsInput) bool {
+						return input.NextToken == nil
+					})).Return(&cognitoidentityprovider.ListUserPoolsOutput{
 					UserPools: []types.UserPoolDescriptionType{
 						{
 							Id:   aws.String("pool-id-1"),
@@ -649,9 +695,10 @@ func TestFindUserPoolIDByName(t *testing.T) {
 				}, nil)
 
 				// Second page
-				mockAPI.On("ListUserPools", mock.Anything, mock.MatchedBy(func(input *cognitoidentityprovider.ListUserPoolsInput) bool {
-					return input.NextToken != nil && *input.NextToken == "next-token"
-				})).Return(&cognitoidentityprovider.ListUserPoolsOutput{
+				mockAPI.On("ListUserPools", mock.Anything,
+					mock.MatchedBy(func(input *cognitoidentityprovider.ListUserPoolsInput) bool {
+						return input.NextToken != nil && *input.NextToken == "next-token"
+					})).Return(&cognitoidentityprovider.ListUserPoolsOutput{
 					UserPools: []types.UserPoolDescriptionType{
 						{
 							Id:   aws.String("pool-id-2"),

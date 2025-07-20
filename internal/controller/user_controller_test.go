@@ -160,7 +160,7 @@ func TestUserReconciler_syncUserWithUserPool(t *testing.T) {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
-				
+
 				// Check status updates for successful operations
 				if !tt.expectErr {
 					assert.NotNil(t, tt.user.Status.LastSyncTime)
@@ -239,10 +239,10 @@ func TestUserReconciler_deleteUserFromUserPool(t *testing.T) {
 			}
 
 			log := logr.Discard()
-			
+
 			// This method doesn't return an error, it just logs
 			reconciler.deleteUserFromUserPool(context.Background(), tt.username, tt.sub, log)
-			
+
 			// Test passes if no panic occurs
 		})
 	}
