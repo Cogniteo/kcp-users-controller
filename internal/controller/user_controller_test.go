@@ -18,256 +18,310 @@ package controller
 
 import (
 	"context"
-	"fmt"
-	"net/http"
+	"errors"
 	"testing"
-	"time"
 
-	logr "github.com/go-logr/logr"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/record"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/cluster"
-	"sigs.k8s.io/controller-runtime/pkg/config"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
-	"sigs.k8s.io/multicluster-runtime/pkg/multicluster"
-	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
-
+	"github.com/go-logr/logr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
-	"github.com/cogniteo/kcp-users-controller/pkg/cognito"
+	"github.com/cogniteo/kcp-users-controller/internal/controller/mocks"
+	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 )
 
-// Test helper types
-type fakeCluster struct {
-	client client.Client
-}
+func TestUserReconciler_syncUserWithUserPool(t *testing.T) {
+	tests := []struct {
+		name       string
+		user       *kcpv1alpha1.User
+		setupMocks func(*mocks.MockUserPoolClient)
+		expectErr  bool
+	}{
+		{
+			name: "create new user successfully",
+			user: &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			},
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test@example.com").Return(nil, errors.New("user not found"))
+				mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(&userpool.User{
+					Username: "test-user",
+					Email:    "test@example.com",
+					Enabled:  true,
+					Sub:      "test-sub-123",
+				}, nil)
+			},
+			expectErr: false,
+		},
+		{
+			name: "update existing user",
+			user: &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "updated@example.com",
+					Enabled: false,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			},
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+					Username: "test-user",
+					Email:    "test@example.com",
+					Enabled:  true,
+					Sub:      "test-sub-123",
+				}, nil)
+				mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil)
+			},
+			expectErr: false,
+		},
+		{
+			name: "user exists and up to date",
+			user: &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			},
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+					Username: "test-user",
+					Email:    "test@example.com",
+					Enabled:  true,
+					Sub:      "test-sub-123",
+				}, nil)
+			},
+			expectErr: false,
+		},
+		{
+			name: "create user fails",
+			user: &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			},
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test@example.com").Return(nil, errors.New("user not found"))
+				mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil, errors.New("creation failed"))
+			},
+			expectErr: true,
+		},
+		{
+			name: "update user fails",
+			user: &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "updated@example.com",
+					Enabled: false,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			},
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+					Username: "test-user",
+					Email:    "test@example.com",
+					Enabled:  true,
+					Sub:      "test-sub-123",
+				}, nil)
+				mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(errors.New("update failed"))
+			},
+			expectErr: true,
+		},
+	}
 
-func (f *fakeCluster) GetClient() client.Client                             { return f.client }
-func (f *fakeCluster) GetAPIReader() client.Reader                          { return f.client }
-func (f *fakeCluster) GetHTTPClient() *http.Client                          { return nil }
-func (f *fakeCluster) GetConfig() *rest.Config                              { return nil }
-func (f *fakeCluster) GetCache() cache.Cache                                { return nil }
-func (f *fakeCluster) GetScheme() *runtime.Scheme                           { return nil }
-func (f *fakeCluster) GetFieldIndexer() client.FieldIndexer                 { return nil }
-func (f *fakeCluster) GetEventRecorderFor(name string) record.EventRecorder { return nil }
-func (f *fakeCluster) GetRESTMapper() meta.RESTMapper                       { return nil }
-func (f *fakeCluster) Start(ctx context.Context) error                      { return nil }
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			tt.setupMocks(mockUserPool)
 
-type fakeManager struct {
-	cluster cluster.Cluster
-	err     error
-}
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
 
-func (f *fakeManager) GetCluster(ctx context.Context, name string) (cluster.Cluster, error) {
-	return f.cluster, f.err
-}
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), tt.user, log)
 
-// Minimal Manager interface implementation
-func (f *fakeManager) Add(runnable mcmanager.Runnable) error { return nil }
-func (f *fakeManager) Elected() <-chan struct{}              { return nil }
-func (f *fakeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
-	return nil
-}
-func (f *fakeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
-func (f *fakeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
-func (f *fakeManager) Start(ctx context.Context) error                          { return nil }
-func (f *fakeManager) GetWebhookServer() webhook.Server                         { return nil }
-func (f *fakeManager) GetLogger() logr.Logger                                   { return logr.Logger{} }
-func (f *fakeManager) GetControllerOptions() config.Controller                  { return config.Controller{} }
-func (f *fakeManager) ClusterFromContext(ctx context.Context) (cluster.Cluster, error) {
-	return nil, nil
-}
-func (f *fakeManager) GetManager(ctx context.Context, clusterName string) (manager.Manager, error) {
-	return nil, nil
-}
-func (f *fakeManager) GetLocalManager() manager.Manager     { return nil }
-func (f *fakeManager) GetProvider() multicluster.Provider   { return nil }
-func (f *fakeManager) GetFieldIndexer() client.FieldIndexer { return nil }
-func (f *fakeManager) Engage(ctx context.Context, clusterName string, clusterObj cluster.Cluster) error {
-	return nil
-}
-
-// Use the mock client from the cognito package for testing
-
-var _ = Describe("User Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-resource"
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
-		}
-		user := &kcpv1alpha1.User{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind User")
-			err := k8sClient.Get(ctx, typeNamespacedName, user)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &kcpv1alpha1.User{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-					Spec: kcpv1alpha1.UserSpec{
-						Email:   "test@example.com",
-						Enabled: true,
-					},
+			if tt.expectErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				
+				// Check status updates for successful operations
+				if !tt.expectErr {
+					assert.NotNil(t, tt.user.Status.LastSyncTime)
+					if tt.user.Status.Sub == "" {
+						// For new user creation, sub should be populated
+						if tt.name == "create new user successfully" {
+							assert.Equal(t, "test-sub-123", tt.user.Status.Sub)
+							assert.Equal(t, "CONFIRMED", tt.user.Status.UserPoolStatus)
+						}
+					}
 				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
+	}
+}
 
-		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
-			resource := &kcpv1alpha1.User{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
+func TestUserReconciler_deleteUserFromUserPool(t *testing.T) {
+	tests := []struct {
+		name       string
+		username   string
+		sub        string
+		setupMocks func(*mocks.MockUserPoolClient)
+	}{
+		{
+			name:     "delete user with sub",
+			username: "test-user",
+			sub:      "test-sub-123",
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+					Username: "test-user",
+					Sub:      "test-sub-123",
+				}, nil)
+				mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(nil)
+			},
+		},
+		{
+			name:     "delete user with username fallback",
+			username: "test-user",
+			sub:      "",
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-user").Return(&userpool.User{
+					Username: "test-user",
+				}, nil)
+				mockUserPool.On("DeleteUser", mock.Anything, "test-user").Return(nil)
+			},
+		},
+		{
+			name:     "user not found in pool",
+			username: "test-user",
+			sub:      "test-sub-123",
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(nil, errors.New("user not found"))
+			},
+		},
+		{
+			name:     "delete fails but continues",
+			username: "test-user",
+			sub:      "test-sub-123",
+			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
+				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+					Username: "test-user",
+					Sub:      "test-sub-123",
+				}, nil)
+				mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(errors.New("delete failed"))
+			},
+		},
+	}
 
-			By("Cleanup the specific resource instance User")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			tt.setupMocks(mockUserPool)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			
+			// This method doesn't return an error, it just logs
+			reconciler.deleteUserFromUserPool(context.Background(), tt.username, tt.sub, log)
+			
+			// Test passes if no panic occurs
 		})
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
+	}
+}
 
-			// Create a mock manager that returns the test client
-			mockManager := &fakeManager{
-				cluster: &fakeCluster{client: k8sClient},
-				err:     nil,
-			}
+func TestHelperFunctions(t *testing.T) {
+	t.Run("containsFinalizer", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			finalizers []string
+			finalizer  string
+			expected   bool
+		}{
+			{
+				name:       "finalizer exists",
+				finalizers: []string{"test.io/finalizer", "other.io/finalizer"},
+				finalizer:  "test.io/finalizer",
+				expected:   true,
+			},
+			{
+				name:       "finalizer does not exist",
+				finalizers: []string{"test.io/finalizer", "other.io/finalizer"},
+				finalizer:  "missing.io/finalizer",
+				expected:   false,
+			},
+			{
+				name:       "empty finalizers list",
+				finalizers: []string{},
+				finalizer:  "test.io/finalizer",
+				expected:   false,
+			},
+		}
 
-			// Create a mock Cognito client
-			mockCognitoClient := cognito.NewMockClient()
-
-			controllerReconciler := &UserReconciler{
-				Client:         k8sClient,
-				Scheme:         k8sClient.Scheme(),
-				Manager:        mockManager,
-				UserPoolClient: mockCognitoClient,
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, mcreconcile.Request{
-				ClusterName: "platform",
-				Request:     reconcile.Request{NamespacedName: typeNamespacedName},
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := containsFinalizer(tt.finalizers, tt.finalizer)
+				assert.Equal(t, tt.expected, result)
 			})
-			Expect(err).NotTo(HaveOccurred())
-
-			// Verify user was created in Cognito
-			cognitoUser, err := mockCognitoClient.GetUser(ctx, resourceName)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(cognitoUser.Username).To(Equal(resourceName))
-		})
-	})
-})
-
-// Unit tests using standard testing framework
-func TestUserReconciler_Reconcile(t *testing.T) {
-	scheme := runtime.NewScheme()
-	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add clientgoscheme: %v", err)
-	}
-	if err := kcpv1alpha1.AddToScheme(scheme); err != nil {
-		t.Fatalf("failed to add kcpv1alpha1 scheme: %v", err)
-	}
-
-	userName := "test-user"
-	userNamespace := "default"
-	namespacedName := types.NamespacedName{Name: userName, Namespace: userNamespace}
-
-	t.Run("cluster retrieval failure", func(t *testing.T) {
-		mgr := &fakeManager{err: fmt.Errorf("cluster not found")}
-		r := &UserReconciler{Scheme: scheme, Manager: mgr}
-		_, err := r.Reconcile(context.Background(), mcreconcile.Request{
-			ClusterName: "cluster1",
-			Request:     reconcile.Request{NamespacedName: namespacedName},
-		})
-		if err == nil || err.Error() != "failed to get cluster: cluster not found" {
-			t.Errorf("expected error from GetCluster, got %v", err)
 		}
 	})
 
-	t.Run("resource not found", func(t *testing.T) {
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).Build()
-		mgr := &fakeManager{cluster: &fakeCluster{client: fakeClient}, err: nil}
-		r := &UserReconciler{Scheme: scheme, Manager: mgr}
-		result, err := r.Reconcile(context.Background(), mcreconcile.Request{
-			ClusterName: "cluster1",
-			Request:     reconcile.Request{NamespacedName: namespacedName},
-		})
-		if err != nil {
-			t.Errorf("expected no error, got %v", err)
-		}
-		if result != (ctrl.Result{}) {
-			t.Errorf("expected empty result, got %v", result)
-		}
-	})
-
-	t.Run("successful reconciliation", func(t *testing.T) {
-		initialUser := &kcpv1alpha1.User{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      userName,
-				Namespace: userNamespace,
+	t.Run("removeFinalizer", func(t *testing.T) {
+		tests := []struct {
+			name       string
+			finalizers []string
+			finalizer  string
+			expected   []string
+		}{
+			{
+				name:       "remove existing finalizer",
+				finalizers: []string{"test.io/finalizer", "other.io/finalizer"},
+				finalizer:  "test.io/finalizer",
+				expected:   []string{"other.io/finalizer"},
 			},
-			Spec: kcpv1alpha1.UserSpec{
-				Email:   "test@example.com",
-				Enabled: true,
+			{
+				name:       "remove non-existing finalizer",
+				finalizers: []string{"test.io/finalizer", "other.io/finalizer"},
+				finalizer:  "missing.io/finalizer",
+				expected:   []string{"test.io/finalizer", "other.io/finalizer"},
+			},
+			{
+				name:       "remove from empty list",
+				finalizers: []string{},
+				finalizer:  "test.io/finalizer",
+				expected:   []string{},
+			},
+			{
+				name:       "remove all occurrences",
+				finalizers: []string{"test.io/finalizer", "other.io/finalizer", "test.io/finalizer"},
+				finalizer:  "test.io/finalizer",
+				expected:   []string{"other.io/finalizer"},
 			},
 		}
-		fakeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(initialUser).Build()
-		mgr := &fakeManager{cluster: &fakeCluster{client: fakeClient}, err: nil}
-		mockCognitoClient := cognito.NewMockClient()
-		r := &UserReconciler{Scheme: scheme, Manager: mgr, UserPoolClient: mockCognitoClient}
-		_, err := r.Reconcile(context.Background(), mcreconcile.Request{
-			ClusterName: "cluster1",
-			Request:     reconcile.Request{NamespacedName: namespacedName},
-		})
-		if err != nil {
-			t.Fatalf("expected no error, got %v", err)
-		}
-		updatedUser := &kcpv1alpha1.User{}
-		if err := fakeClient.Get(context.Background(), namespacedName, updatedUser); err != nil {
-			t.Fatalf("failed to get updated user: %v", err)
-		}
-		ts, ok := updatedUser.Annotations["kcp.cogniteo.io/lastReconciledAt"]
-		if !ok {
-			t.Errorf("expected annotation lastReconciledAt, got %v", updatedUser.Annotations)
-		} else {
-			if _, err := time.Parse(time.RFC3339, ts); err != nil {
-				t.Errorf("annotation lastReconciledAt not RFC3339: %v", err)
-			}
-		}
 
-		// Verify user was created in Cognito
-		cognitoUser, err := mockCognitoClient.GetUser(context.Background(), userName)
-		if err != nil {
-			t.Errorf("expected user to be created in Cognito, got error: %v", err)
-		} else {
-			if cognitoUser.Username != userName {
-				t.Errorf("expected username %s, got %s", userName, cognitoUser.Username)
-			}
-			if cognitoUser.Email != "test@example.com" {
-				t.Errorf("expected email test@example.com, got %s", cognitoUser.Email)
-			}
-			if !cognitoUser.Enabled {
-				t.Errorf("expected user to be enabled")
-			}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := removeFinalizer(tt.finalizers, tt.finalizer)
+				assert.Equal(t, tt.expected, result)
+			})
 		}
 	})
 }

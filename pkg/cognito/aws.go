@@ -31,7 +31,7 @@ import (
 
 // AWSClient implements the userpool.Client interface for AWS Cognito
 type AWSClient struct {
-	cognito    *cognitoidentityprovider.Client
+	cognito    CognitoAPI
 	userPoolID string
 }
 
@@ -80,7 +80,7 @@ func NewAWSClientByName(ctx context.Context, userPoolName string) (*AWSClient, e
 }
 
 // findUserPoolIDByName finds a user pool ID by its name
-func findUserPoolIDByName(ctx context.Context, cognito *cognitoidentityprovider.Client,
+func findUserPoolIDByName(ctx context.Context, cognito CognitoAPI,
 	userPoolName string) (string, error) {
 	var nextToken *string
 
@@ -155,12 +155,17 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) (*userp
 		Username: user.Username,
 		Email:    user.Email,
 		Enabled:  user.Enabled,
-		Sub:      user.Email, // In Cognito, the username is the sub by default
+		Sub:      user.Email, // Default fallback
 	}
 
-	// If the response contains user attributes, extract the sub
-	if resp.User != nil && resp.User.Username != nil {
-		createdUser.Sub = *resp.User.Username
+	// If the response contains user attributes, look for the sub attribute
+	if resp.User != nil && len(resp.User.Attributes) > 0 {
+		for _, attr := range resp.User.Attributes {
+			if attr.Name != nil && *attr.Name == "sub" && attr.Value != nil {
+				createdUser.Sub = *attr.Value
+				break
+			}
+		}
 	}
 
 	return createdUser, nil
@@ -320,4 +325,16 @@ func (c *AWSClient) ListUsers(ctx context.Context) ([]*userpool.User, error) {
 	}
 
 	return users, nil
+}
+
+// NewClient creates a new Cognito client with Pod Identity authentication
+// This is a convenience function that returns the AWS implementation
+func NewClient(ctx context.Context, userPoolID string) (userpool.Client, error) {
+	return NewAWSClient(ctx, userPoolID)
+}
+
+// NewClientByName creates a new Cognito client by finding user pool ID from name
+// This is a convenience function that returns the AWS implementation
+func NewClientByName(ctx context.Context, userPoolName string) (userpool.Client, error) {
+	return NewAWSClientByName(ctx, userPoolName)
 }
