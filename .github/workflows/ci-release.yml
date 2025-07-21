@@ -109,6 +109,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     outputs:
       version_tag: ${{ steps.version.outputs.version_tag }}
+      version_no_v: ${{ steps.strip_v.outputs.version_no_v }}
       version_changed: ${{ steps.version.outputs.changed }}
     steps:
       - name: Checkout repository
@@ -118,9 +119,9 @@ jobs:
 
       - name: Determine version bump
         id: version
-        uses: paulhatch/semantic-version@v5.3.0
+        uses: paulhatch/semantic-version@v5.4.0
         with:
-          tag_prefix: ""
+          tag_prefix: "v"
           major_pattern: "BREAKING CHANGE:"
           minor_pattern: "feat:"
           version_format: "${major}.${minor}.${patch}"
@@ -142,7 +143,7 @@ jobs:
         with:
           images: ghcr.io/cogniteo/kcp-users-controller
           tags: |
-            type=raw,value=${{ needs.version.outputs.version_tag }}
+            type=raw,value=${{ needs.version.outputs.version_no_v }}
             type=raw,value=latest
 
       - name: Set up QEMU
@@ -214,8 +215,8 @@ jobs:
 
       - name: Update Chart.yaml with new version
         run: |
-          sed -i "s/version: .*/version: ${{ needs.version.outputs.version_tag }}/" dist/chart/Chart.yaml
-          sed -i "s/appVersion: .*/appVersion: \"${{ needs.version.outputs.version_tag }}\"/" dist/chart/Chart.yaml
+          sed -i "s/version: .*/version: ${{ needs.version.outputs.version}}/" dist/chart/Chart.yaml
+          sed -i "s/appVersion: .*/appVersion: \"${{ needs.version.outputs.version }}\"/" dist/chart/Chart.yaml
 
       - name: Package Helm chart
         run: |
@@ -230,7 +231,7 @@ jobs:
 
       - name: Push Helm chart to GitHub Container Registry
         run: |
-          helm push kcp-users-controller-${{ needs.version.outputs.version_tag }}.tgz oci://ghcr.io/cogniteo/helm-charts
+          helm push kcp-users-controller-${{ needs.version.outputs.version }}.tgz oci://ghcr.io/cogniteo/helm-charts
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
@@ -265,9 +266,9 @@ jobs:
             ${{ steps.changelog.outputs.changelog }}
 
             ## Docker Image
-            `ghcr.io/cogniteo/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
+            `ghcr.io/cogniteo/kcp-users-controller:${{ needs.version.outputs.version_no_v }}`
 
             ## Helm Chart
-            `oci://ghcr.io/cogniteo/helm-charts/kcp-users-controller:${{ needs.version.outputs.version_tag }}`
+            `oci://ghcr.io/cogniteo/helm-charts/kcp-users-controller:${{ needs.version.outputs.version_no_v }}`
           draft: false
           prerelease: false
