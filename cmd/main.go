@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"os"
+	"time"
 
 	"github.com/alecthomas/kingpin/v2"
 
@@ -32,6 +33,7 @@ import (
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -42,6 +44,7 @@ import (
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 	"github.com/kcp-dev/multicluster-provider/apiexport"
 
+	retry "github.com/avast/retry-go"
 	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 	// +kubebuilder:scaffold:imports
@@ -158,10 +161,11 @@ func main() {
 	if *caCertPath != "" {
 		cfg.CAFile = *caCertPath
 	}
-
+	log.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	provider, err := apiexport.New(cfg, apiexport.Options{
 		Scheme: clientgoscheme.Scheme,
 	})
+
 	if err != nil {
 		setupLog.Error(err, "unable to create apiexport provider")
 		os.Exit(1)
@@ -235,12 +239,15 @@ func main() {
 	ctx := signals.SetupSignalHandler()
 	if provider != nil {
 		setupLog.Info("Starting provider")
-		go func() {
+		retry.Do(func() error {
 			if err := provider.Run(ctx, mgr); err != nil {
 				setupLog.Error(err, "unable to run provider")
-				os.Exit(1)
+				return err
 			}
-		}()
+			return nil
+		}, retry.Attempts(10), retry.Delay(10*time.Second), retry.OnRetry(func(n uint, err error) {
+			setupLog.Error(err, "unable to run provider", "attempt", n)
+		}))
 	}
 
 	setupLog.Info("starting manager")
