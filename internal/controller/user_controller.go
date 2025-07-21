@@ -29,11 +29,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
-	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 	mcbuilder "sigs.k8s.io/multicluster-runtime/pkg/builder"
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
+
+	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
+	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 )
 
 // UserReconciler reconciles a User object

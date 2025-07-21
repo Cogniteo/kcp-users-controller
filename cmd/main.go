@@ -39,14 +39,17 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	"github.com/kcp-dev/multicluster-provider/apiexport"
+
 	"github.com/cogniteo/kcp-users-controller/internal/controller"
 	"github.com/cogniteo/kcp-users-controller/pkg/cognito"
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
-	"github.com/kcp-dev/multicluster-provider/apiexport"
 
 	retry "github.com/avast/retry-go"
-	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
+
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
+
+	kcpv1alpha1 "github.com/cogniteo/kcp-users-controller/api/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -239,15 +242,14 @@ func main() {
 	ctx := signals.SetupSignalHandler()
 	if provider != nil {
 		setupLog.Info("Starting provider")
-		retry.Do(func() error {
-			if err := provider.Run(ctx, mgr); err != nil {
-				setupLog.Error(err, "unable to run provider")
-				return err
-			}
-			return nil
+		if err := retry.Do(func() error {
+			return provider.Run(ctx, mgr)
 		}, retry.Attempts(10), retry.Delay(10*time.Second), retry.OnRetry(func(n uint, err error) {
-			setupLog.Error(err, "unable to run provider", "attempt", n)
-		}))
+			setupLog.Error(err, "failed to run provider, retrying", "attempt", n)
+		})); err != nil {
+			setupLog.Error(err, "unable to run provider, exiting")
+			os.Exit(1)
+		}
 	}
 
 	setupLog.Info("starting manager")
