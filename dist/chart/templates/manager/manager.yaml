@@ -33,7 +33,7 @@ spec:
             {{- end }}
           command:
             - /manager
-          image: {{ .Values.controllerManager.container.image.repository }}:{{ $.Release.AppVersion }}
+          image: {{ .Values.controllerManager.container.image.repository }}:{{ $.Chart.AppVersion }}
           {{- if .Values.controllerManager.container.env }}
           env:
             {{- range $key, $value := .Values.controllerManager.container.env }}
