@@ -92,6 +92,13 @@ func main() {
 		caCertPath = app.Flag("ca-cert",
 			"Path to the CA certificate (PEM format) for TLS server verification.").
 			Envar("CA_CERT_PATH").String()
+		insecureSkipTLSVerify = app.Flag("insecure-skip-tls-verify",
+			"Skip TLS certificate verification for the Kubernetes API server connection. "+
+				"This should only be used in development environments.").
+			Envar("INSECURE_SKIP_TLS_VERIFY").Default("false").Bool()
+		bearerToken = app.Flag("token",
+			"Bearer token for authenticating with the Kubernetes API server.").
+			Envar("TOKEN").String()
 		virtualWorkspaceUrl = app.Flag("virtual-workspace-url",
 			"The URL of the virtual workspace (e.g., "+
 				"https://kcp.example.com/clusters/org_myorg_workspace_myworkspace). "+
@@ -154,7 +161,7 @@ func main() {
 		setupLog.Info("using virtual workspace URL for REST client", "url", *virtualWorkspaceUrl)
 	}
 
-	// TLS authentication for REST client
+	// TLS configuration for REST client
 	if *clientCertPath != "" {
 		cfg.CertFile = *clientCertPath
 	}
@@ -163,6 +170,15 @@ func main() {
 	}
 	if *caCertPath != "" {
 		cfg.CAFile = *caCertPath
+	}
+	if *insecureSkipTLSVerify {
+		cfg.Insecure = true
+		cfg.CAData = nil
+		setupLog.Info("TLS certificate verification disabled - this should only be used in development")
+	}
+	if *bearerToken != "" {
+		cfg.BearerToken = *bearerToken
+		setupLog.Info("using bearer token for authentication")
 	}
 	log.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 	provider, err := apiexport.New(cfg, apiexport.Options{
@@ -241,10 +257,10 @@ func main() {
 	}
 	ctx := signals.SetupSignalHandler()
 	if provider != nil {
-		setupLog.Info("Starting provider")
 		if err := retry.Do(func() error {
+			setupLog.Info("Starting provider")
 			return provider.Run(ctx, mgr)
-		}, retry.Attempts(10), retry.Delay(10*time.Second), retry.OnRetry(func(n uint, err error) {
+		}, retry.Delay(2*time.Second), retry.Attempts(10), retry.OnRetry(func(n uint, err error) {
 			setupLog.Error(err, "failed to run provider, retrying", "attempt", n)
 		})); err != nil {
 			setupLog.Error(err, "unable to run provider, exiting")
