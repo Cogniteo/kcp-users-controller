@@ -19,10 +19,10 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"github.com/alecthomas/kingpin/v2"
+	"github.com/avast/retry-go"
 	"os"
 	"time"
-
-	"github.com/alecthomas/kingpin/v2"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -44,8 +44,6 @@ import (
 	"github.com/cogniteo/kcp-users-controller/internal/controller"
 	"github.com/cogniteo/kcp-users-controller/pkg/cognito"
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
-
-	retry "github.com/avast/retry-go"
 
 	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
@@ -250,15 +248,17 @@ func main() {
 
 	ctx := signals.SetupSignalHandler()
 	if provider != nil {
-		if err := retry.Do(func() error {
-			setupLog.Info("Starting provider")
-			return provider.Run(ctx, mgr)
-		}, retry.Delay(2*time.Second), retry.Attempts(10), retry.OnRetry(func(n uint, err error) {
-			setupLog.Error(err, "failed to run provider, retrying", "attempt", n)
-		})); err != nil {
-			setupLog.Error(err, "unable to run provider, exiting")
-			os.Exit(1)
-		}
+		go func() {
+			if err := retry.Do(func() error {
+				setupLog.Info("Starting provider")
+				return provider.Run(ctx, mgr)
+			}, retry.Delay(2*time.Second), retry.Attempts(10), retry.OnRetry(func(n uint, err error) {
+				setupLog.Error(err, "failed to run provider, retrying", "attempt", n)
+			})); err != nil {
+				setupLog.Error(err, "unable to run provider, exiting")
+				os.Exit(1)
+			}
+		}()
 	}
 
 	setupLog.Info("starting manager")
