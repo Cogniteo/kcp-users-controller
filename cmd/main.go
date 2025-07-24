@@ -19,10 +19,11 @@ package main
 import (
 	"context"
 	"crypto/tls"
-	"github.com/alecthomas/kingpin/v2"
-	"github.com/avast/retry-go"
 	"os"
 	"time"
+
+	kingpin "github.com/alecthomas/kingpin/v2"
+	retry "github.com/avast/retry-go"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.

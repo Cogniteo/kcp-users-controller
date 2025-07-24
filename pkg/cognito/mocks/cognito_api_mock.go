@@ -616,7 +616,7 @@ func (_c *MockCognitoAPI_ListUsers_Call) RunAndReturn(run func(context.Context, 
 
 // NewMockCognitoAPI creates a new instance of MockCognitoAPI. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
-func NewMockCognitoAPI(t interface{
+func NewMockCognitoAPI(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockCognitoAPI {

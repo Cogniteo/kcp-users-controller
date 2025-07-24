@@ -1,0 +1,65 @@
+repos:
+  # Go formatting and basic checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  # Go mod tidy (matches GitHub Actions test job)
+  - repo: local
+    hooks:
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: go mod tidy
+        language: system
+        files: ^go\.(mod|sum)$
+        pass_filenames: false
+
+  # Go formatting
+  - repo: local
+    hooks:
+      - id: gofmt
+        name: gofmt
+        entry: gofmt -w
+        language: system
+        files: \.go$
+
+  # Go imports
+  - repo: local
+    hooks:
+      - id: goimports
+        name: goimports
+        entry: goimports -w
+        language: system
+        files: \.go$
+
+  # Go vet
+  - repo: local
+    hooks:
+      - id: go-vet
+        name: go vet
+        entry: go vet ./...
+        language: system
+        files: \.go$
+        pass_filenames: false
+
+  # golangci-lint (matches GitHub Actions lint job with same version)
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v2.2.1
+    hooks:
+      - id: golangci-lint
+        args: [--config=.golangci.yml]
+
+  # Run tests (matches GitHub Actions test job)
+  - repo: local
+    hooks:
+      - id: go-test
+        name: go test
+        entry: make test
+        language: system
+        files: \.go$
+        pass_filenames: false

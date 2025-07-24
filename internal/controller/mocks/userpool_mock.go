@@ -295,7 +295,7 @@ func (_c *MockUserPoolClient_UpdateUser_Call) RunAndReturn(run func(context.Cont
 
 // NewMockUserPoolClient creates a new instance of MockUserPoolClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
 // The first argument is typically a *testing.T value.
-func NewMockUserPoolClient(t interface{
+func NewMockUserPoolClient(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) *MockUserPoolClient {
