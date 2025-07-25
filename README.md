@@ -97,6 +97,8 @@ metadata:
   name: john-doe
   namespace: default
 spec:
+  email: "john.doe@example.com"
+  enabled: true
 ```
 
 Apply the resource:
@@ -105,9 +107,9 @@ kubectl apply -f user-example.yaml
 ```
 
 The controller will automatically:
-1. Create the user in AWS Cognito User Pool
-2. Set the temporary password
-3. Update the User resource status
+1. Create the user in AWS Cognito User Pool with the specified email
+2. Set the user's enabled status
+3. Update the User resource status with the user's `sub` (unique identifier)
 
 ### Viewing Users
 
@@ -166,16 +168,16 @@ make docker-build IMG=your-registry/kcp-users-controller:tag
 | Field | Type | Description |
 |-------|------|-------------|
 | `email` | string | User's email address |
-| `username` | string | Username for the user |
-| `temporaryPassword` | string | Temporary password (optional) |
-| `attributes` | map[string]string | Additional user attributes |
+| `enabled` | bool | Whether the user is enabled (optional, defaults to false) |
 
 ### User Status
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `cognitoStatus` | string | Status in Cognito (CONFIRMED, UNCONFIRMED, etc.) |
-| `conditions` | []Condition | Current conditions of the user |
+| `sub` | string | User's unique identifier (subject) in the user pool |
+| `userPoolStatus` | string | Current status of the user in the user pool |
+| `lastSyncTime` | *metav1.Time | Timestamp of the last successful sync with the user pool |
+| `conditions` | []metav1.Condition | Current service state conditions of the User |
 
 ## Releases
 

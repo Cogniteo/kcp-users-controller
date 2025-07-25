@@ -4,9 +4,25 @@ on:
   push:
     branches:
       - master
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'Dockerfile'
+      - 'dist/chart/**'
+      - '.github/workflows/**'
   pull_request:
     branches:
       - master
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'Dockerfile'
+      - 'dist/chart/**'
+      - '.github/workflows/**'
 
 permissions:
   contents: write
