@@ -120,10 +120,24 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 	user.Annotations["kcp.cogniteo.io/lastReconciledAt"] = time.Now().Format(time.RFC3339)
 
-	// Update the resource with both spec and status
+	// Update the resource (spec and metadata only)
 	if err := clusterClient.Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User")
 		return ctrl.Result{}, err
+	}
+
+	// Fetch the latest resource state to ensure we have the correct resourceVersion for status update
+	if err := clusterClient.Get(ctx, req.NamespacedName, &user); err != nil {
+		log.Error(err, "Failed to fetch User before status update")
+		return ctrl.Result{}, err
+	}
+
+	// Re-apply status changes after fetching latest state
+	if r.UserPoolClient != nil {
+		if err := r.syncUserWithUserPool(ctx, &user, log); err != nil {
+			log.Error(err, "Failed to re-sync user status")
+			return ctrl.Result{RequeueAfter: time.Minute * 5}, err
+		}
 	}
 
 	// Update the status subresource
