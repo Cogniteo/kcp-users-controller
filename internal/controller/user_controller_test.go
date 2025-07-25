@@ -32,207 +32,169 @@ import (
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 )
 
-func TestUserReconciler_syncUserWithUserPool(t *testing.T) {
-	tests := []struct {
-		name       string
-		user       *kcpv1alpha1.User
-		setupMocks func(*mocks.MockUserPoolClient)
-		expectErr  bool
-	}{
-		{
-			name: "create new user successfully",
-			user: &kcpv1alpha1.User{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
-				Spec: kcpv1alpha1.UserSpec{
-					Email:   "test@example.com",
-					Enabled: true,
-				},
-			},
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test@example.com").Return(nil, errors.New("user not found"))
-				mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(&userpool.User{
-					Username: "test-user",
-					Email:    "test@example.com",
-					Enabled:  true,
-					Sub:      "test-sub-123",
-				}, nil)
-			},
-			expectErr: false,
-		},
-		{
-			name: "update existing user",
-			user: &kcpv1alpha1.User{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
-				Spec: kcpv1alpha1.UserSpec{
-					Email:   "updated@example.com",
-					Enabled: false,
-				},
-				Status: kcpv1alpha1.UserStatus{
-					Sub: "test-sub-123",
-				},
-			},
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
-					Username: "test-user",
-					Email:    "test@example.com",
-					Enabled:  true,
-					Sub:      "test-sub-123",
-				}, nil)
-				mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil)
-			},
-			expectErr: false,
-		},
-		{
-			name: "user exists and up to date",
-			user: &kcpv1alpha1.User{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
-				Spec: kcpv1alpha1.UserSpec{
-					Email:   "test@example.com",
-					Enabled: true,
-				},
-				Status: kcpv1alpha1.UserStatus{
-					Sub: "test-sub-123",
-				},
-			},
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
-					Username: "test-user",
-					Email:    "test@example.com",
-					Enabled:  true,
-					Sub:      "test-sub-123",
-				}, nil)
-			},
-			expectErr: false,
-		},
-		{
-			name: "create user fails",
-			user: &kcpv1alpha1.User{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
-				Spec: kcpv1alpha1.UserSpec{
-					Email:   "test@example.com",
-					Enabled: true,
-				},
-			},
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test@example.com").Return(nil, errors.New("user not found"))
-				mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil, errors.New("creation failed"))
-			},
-			expectErr: true,
-		},
-		{
-			name: "update user fails",
-			user: &kcpv1alpha1.User{
-				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
-				Spec: kcpv1alpha1.UserSpec{
-					Email:   "updated@example.com",
-					Enabled: false,
-				},
-				Status: kcpv1alpha1.UserStatus{
-					Sub: "test-sub-123",
-				},
-			},
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
-					Username: "test-user",
-					Email:    "test@example.com",
-					Enabled:  true,
-					Sub:      "test-sub-123",
-				}, nil)
-				mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(errors.New("update failed"))
-			},
-			expectErr: true,
-		},
-	}
+func TestUserReconciler(t *testing.T) {
+	t.Run("Reconcile", func(t *testing.T) {
+		t.Run("nil user pool client handling", func(t *testing.T) {
+			reconciler := &UserReconciler{
+				UserPoolClient: nil,
+			}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
+			log := logr.Discard()
+
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+			require.NoError(t, err, "syncUserWithUserPool should handle nil UserPoolClient gracefully")
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
+		})
+
+		t.Run("finalizer management", func(t *testing.T) {
+			finalizers := []string{"other.io/finalizer"}
+			finalizerName := "kcp.cogniteo.io/user-pool-cleanup"
+
+			assert.False(t, containsFinalizer(finalizers, finalizerName))
+
+			finalizersWithAdded := append(finalizers, finalizerName)
+			assert.True(t, containsFinalizer(finalizersWithAdded, finalizerName))
+
+			finalizersAfterRemoval := removeFinalizer(finalizersWithAdded, finalizerName)
+			assert.False(t, containsFinalizer(finalizersAfterRemoval, finalizerName))
+			assert.Equal(t, finalizers, finalizersAfterRemoval)
+		})
+
+		t.Run("user pool sync integration", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
 			mockUserPool := mocks.NewMockUserPoolClient(t)
-			tt.setupMocks(mockUserPool)
+			mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
 
 			reconciler := &UserReconciler{
 				UserPoolClient: mockUserPool,
 			}
 
 			log := logr.Discard()
-			err := reconciler.syncUserWithUserPool(context.Background(), tt.user, log)
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
 
-			if tt.expectErr {
-				require.Error(t, err)
-			} else {
-				require.NoError(t, err)
-
-				// Check status updates for successful operations
-				if !tt.expectErr {
-					assert.NotNil(t, tt.user.Status.LastSyncTime)
-					if tt.user.Status.Sub == "" {
-						// For new user creation, sub should be populated
-						if tt.name == "create new user successfully" {
-							assert.Equal(t, "test-sub-123", tt.user.Status.Sub)
-							assert.Equal(t, "CONFIRMED", tt.user.Status.UserPoolStatus)
-						}
-					}
-				}
-			}
+			require.NoError(t, err)
+			assert.Equal(t, "test-sub-123", user.Status.Sub)
+			assert.Equal(t, "CONFIRMED", user.Status.UserPoolStatus)
+			assert.NotNil(t, user.Status.LastSyncTime)
+			mockUserPool.AssertExpectations(t)
 		})
-	}
-}
 
-func TestUserReconciler_deleteUserFromUserPool(t *testing.T) {
-	tests := []struct {
-		name       string
-		username   string
-		sub        string
-		setupMocks func(*mocks.MockUserPoolClient)
-	}{
-		{
-			name:     "delete user with sub",
-			username: "test-user",
-			sub:      "test-sub-123",
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
-					Username: "test-user",
-					Sub:      "test-sub-123",
-				}, nil)
-				mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(nil)
-			},
-		},
-		{
-			name:     "delete user with username fallback",
-			username: "test-user",
-			sub:      "",
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-user").Return(&userpool.User{
-					Username: "test-user",
-				}, nil)
-				mockUserPool.On("DeleteUser", mock.Anything, "test-user").Return(nil)
-			},
-		},
-		{
-			name:     "user not found in pool",
-			username: "test-user",
-			sub:      "test-sub-123",
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(nil, errors.New("user not found"))
-			},
-		},
-		{
-			name:     "delete fails but continues",
-			username: "test-user",
-			sub:      "test-sub-123",
-			setupMocks: func(mockUserPool *mocks.MockUserPoolClient) {
-				mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
-					Username: "test-user",
-					Sub:      "test-sub-123",
-				}, nil)
-				mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(errors.New("delete failed"))
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+		t.Run("user pool deletion integration", func(t *testing.T) {
 			mockUserPool := mocks.NewMockUserPoolClient(t)
-			tt.setupMocks(mockUserPool)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
+
+			mockUserPool.AssertExpectations(t)
+		})
+
+		t.Run("error handling in sync operations", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil, errors.New("user pool service unavailable"))
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "failed to create user in user pool")
+			mockUserPool.AssertExpectations(t)
+		})
+
+		t.Run("sub-only user fetching", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "updated@example.com",
+					Enabled: false,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.NoError(t, err)
+			assert.NotNil(t, user.Status.LastSyncTime)
+			mockUserPool.AssertExpectations(t)
+		})
+	})
+	t.Run("deleteUserFromUserPool", func(t *testing.T) {
+		t.Run("without user pool client", func(t *testing.T) {
+			reconciler := &UserReconciler{
+				UserPoolClient: nil, // No user pool client
+			}
+
+			log := logr.Discard()
+
+			// Should not panic when UserPoolClient is nil
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
+
+			// Test passes if no panic occurs
+		})
+
+		t.Run("delete user with sub", func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(nil)
 
 			reconciler := &UserReconciler{
 				UserPoolClient: mockUserPool,
@@ -241,11 +203,240 @@ func TestUserReconciler_deleteUserFromUserPool(t *testing.T) {
 			log := logr.Discard()
 
 			// This method doesn't return an error, it just logs
-			reconciler.deleteUserFromUserPool(context.Background(), tt.username, tt.sub, log)
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
 
-			// Test passes if no panic occurs
+			// Test passes if no panic occurs and mocks are satisfied
+			mockUserPool.AssertExpectations(t)
 		})
-	}
+
+		t.Run("delete user with username fallback", func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-user").Return(&userpool.User{
+				Username: "test-user",
+			}, nil)
+			mockUserPool.On("DeleteUser", mock.Anything, "test-user").Return(nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+
+			// This method doesn't return an error, it just logs
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "", log)
+
+			// Test passes if no panic occurs and mocks are satisfied
+			mockUserPool.AssertExpectations(t)
+		})
+
+		t.Run("user not found in pool", func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(nil, errors.New("user not found"))
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+
+			// This method doesn't return an error, it just logs
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
+
+			// Test passes if no panic occurs and mocks are satisfied
+			mockUserPool.AssertExpectations(t)
+		})
+
+		t.Run("delete fails but continues", func(t *testing.T) {
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("DeleteUser", mock.Anything, "test-sub-123").Return(errors.New("delete failed"))
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+
+			// This method doesn't return an error, it just logs
+			reconciler.deleteUserFromUserPool(context.Background(), "test-user", "test-sub-123", log)
+
+			// Test passes if no panic occurs and mocks are satisfied
+			mockUserPool.AssertExpectations(t)
+		})
+	})
+
+	t.Run("syncUserWithUserPool", func(t *testing.T) {
+		t.Run("create new user successfully", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.NoError(t, err)
+			assert.NotNil(t, user.Status.LastSyncTime)
+			assert.Equal(t, "test-sub-123", user.Status.Sub)
+			assert.Equal(t, "CONFIRMED", user.Status.UserPoolStatus)
+		})
+
+		t.Run("update existing user", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "updated@example.com",
+					Enabled: false,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.NoError(t, err)
+			assert.NotNil(t, user.Status.LastSyncTime)
+		})
+
+		t.Run("user exists and up to date", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.NoError(t, err)
+			assert.NotNil(t, user.Status.LastSyncTime)
+		})
+
+		t.Run("create user fails", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("CreateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil, errors.New("creation failed"))
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "failed to create user in user pool")
+		})
+
+		t.Run("update user fails", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "updated@example.com",
+					Enabled: false,
+				},
+				Status: kcpv1alpha1.UserStatus{
+					Sub: "test-sub-123",
+				},
+			}
+
+			mockUserPool := mocks.NewMockUserPoolClient(t)
+			mockUserPool.On("GetUser", mock.Anything, "test-sub-123").Return(&userpool.User{
+				Username: "test-user",
+				Email:    "test@example.com",
+				Enabled:  true,
+				Sub:      "test-sub-123",
+			}, nil)
+			mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(errors.New("update failed"))
+
+			reconciler := &UserReconciler{
+				UserPoolClient: mockUserPool,
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "failed to update user in user pool")
+		})
+
+		t.Run("without user pool client", func(t *testing.T) {
+			user := &kcpv1alpha1.User{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-user"},
+				Spec: kcpv1alpha1.UserSpec{
+					Email:   "test@example.com",
+					Enabled: true,
+				},
+			}
+
+			reconciler := &UserReconciler{
+				UserPoolClient: nil, // No user pool client
+			}
+
+			log := logr.Discard()
+			err := reconciler.syncUserWithUserPool(context.Background(), user, log)
+
+			// Should not error when UserPoolClient is nil (graceful handling)
+			require.NoError(t, err)
+		})
+	})
 }
 
 func TestHelperFunctions(t *testing.T) {

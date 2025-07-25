@@ -1,6 +1,8 @@
 # [MANAGER]: Manager Deployment Configurations
 controllerManager:
   replicas: 1
+  strategy:
+    type: Recreate
   container:
     image:
       repository: ghcr.io/cogniteo/kcp-users-controller
@@ -37,7 +39,6 @@ controllerManager:
       type: RuntimeDefault
   terminationGracePeriodSeconds: 10
   serviceAccountName: users-controller-manager
-  # Extra secrets to be mounted as volumes
   extraSecrets: []
   # Example:
   # extraSecrets:

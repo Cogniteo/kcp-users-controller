@@ -96,10 +96,8 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 
 	// Add finalizer if not present
-	if !containsFinalizer(user.Finalizers,
-		finalizerName) {
-		user.Finalizers = append(user.Finalizers,
-			finalizerName)
+	if !containsFinalizer(user.Finalizers, finalizerName) {
+		user.Finalizers = append(user.Finalizers, finalizerName)
 		if err := clusterClient.Update(ctx, &user); err != nil {
 			log.Error(err, "Failed to add finalizer")
 			return ctrl.Result{}, err
@@ -114,12 +112,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		}
 	}
 
-	// Add or update annotation
-	if user.Annotations == nil {
-		user.Annotations = make(map[string]string)
-	}
-	user.Annotations["kcp.cogniteo.io/lastReconciledAt"] = time.Now().Format(time.RFC3339)
-
 	// Update the resource (spec and metadata only)
 	if err := clusterClient.Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User")
@@ -132,14 +124,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		return ctrl.Result{}, err
 	}
 
-	// Re-apply status changes after fetching latest state
-	if r.UserPoolClient != nil {
-		if err := r.syncUserWithUserPool(ctx, &user, log); err != nil {
-			log.Error(err, "Failed to re-sync user status")
-			return ctrl.Result{RequeueAfter: time.Minute * 5}, err
-		}
-	}
-
 	// Update the status subresource
 	if err := clusterClient.Status().Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User status")
@@ -150,15 +134,20 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 }
 
 // syncUserWithUserPool synchronizes a Kubernetes User with User Pool
-func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1alpha1.User,
-	log logr.Logger) error {
+func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1alpha1.User, log logr.Logger) error {
+	// Skip sync if UserPoolClient is not configured
+	if r.UserPoolClient == nil {
+		log.Info("UserPoolClient not configured, skipping user pool sync", "username", user.Name)
+		return nil
+	}
+
 	poolUser := &userpool.User{
 		Username: user.Name,
 		Email:    user.Spec.Email,
 		Enabled:  user.Spec.Enabled,
 	}
 
-	// Check if user exists in user pool (use sub from status if available)
+	// Check if user exists in user pool (only use sub from status)
 	var existingUser *userpool.User
 	var err error
 
@@ -166,8 +155,8 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		// Use stored sub to check if user exists
 		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub)
 	} else {
-		// Fallback to using email as identifier
-		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Spec.Email)
+		// No sub available, treat as new user
+		err = fmt.Errorf("user not found")
 	}
 
 	if err != nil {
@@ -189,7 +178,7 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		// User exists, check if update is needed
 		if existingUser.Email != poolUser.Email ||
 			existingUser.Enabled != poolUser.Enabled {
-			log.Info("Updating user in user pool", "username", user.Name)
+			log.Info("Updating user in user pool", "username", user.Name, "sub", existingUser.Sub)
 			if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
 				return fmt.Errorf("failed to update user in user pool: %w", err)
 			}
@@ -214,6 +203,12 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 // deleteUserFromUserPool safely deletes a user from the user pool with appropriate logging
 func (r *UserReconciler) deleteUserFromUserPool(ctx context.Context, username string, sub string,
 	log logr.Logger) {
+	// Skip deletion if UserPoolClient is not configured
+	if r.UserPoolClient == nil {
+		log.Info("UserPoolClient not configured, skipping user pool deletion", "username", username)
+		return
+	}
+
 	// Determine what identifier to use for deletion
 	identifier := sub
 	if identifier == "" {
