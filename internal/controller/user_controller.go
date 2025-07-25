@@ -125,6 +125,7 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	}
 
 	// Update the status subresource
+	log.Info("Updating User status", "username", user.Name, "sub", user.Status.Sub, "lastSyncTime", user.Status.LastSyncTime)
 	if err := clusterClient.Status().Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User status")
 		return ctrl.Result{}, err
