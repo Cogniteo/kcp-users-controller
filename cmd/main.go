@@ -24,6 +24,7 @@ import (
 
 	kingpin "github.com/alecthomas/kingpin/v2"
 	retry "github.com/avast/retry-go"
+	"go.uber.org/zap/zapcore"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -120,6 +121,8 @@ func main() {
 
 	opts := zap.Options{
 		Development: *zapDevel,
+		// Suppress stack traces for errors to reduce log noise
+		StacktraceLevel: zapcore.DPanicLevel,
 	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
