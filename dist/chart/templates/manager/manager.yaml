@@ -8,7 +8,8 @@ metadata:
     control-plane: controller-manager
 spec:
   replicas:  {{ .Values.controllerManager.replicas }}
-  strategy: {{ .Values.controllerManager.strategy | toYaml }}
+  strategy:
+    {{- toYaml .Values.controllerManager.strategy }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
