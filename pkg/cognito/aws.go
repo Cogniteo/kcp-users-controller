@@ -30,6 +30,10 @@ import (
 	"github.com/cogniteo/kcp-users-controller/pkg/userpool"
 )
 
+const (
+	emailAttribute = "email"
+)
+
 // AWSClient implements the userpool.Client interface for AWS Cognito
 type AWSClient struct {
 	cognito    CognitoAPI
@@ -124,7 +128,7 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) (*userp
 
 	attributes := []types.AttributeType{
 		{
-			Name:  aws.String("email"),
+			Name:  aws.String(emailAttribute),
 			Value: aws.String(user.Email),
 		},
 		{
@@ -151,20 +155,21 @@ func (c *AWSClient) CreateUser(ctx context.Context, user *userpool.User) (*userp
 		return nil, fmt.Errorf("failed to create user %s: %w", user.Email, err)
 	}
 
-	// Extract the sub from the response
+	// Extract the user information from the response
 	createdUser := &userpool.User{
 		Username: user.Username,
-		Email:    user.Email,
 		Enabled:  user.Enabled,
-		Sub:      user.Email, // Default fallback
+		Sub:      *resp.User.Username, // AWS returns the sub as Username
 	}
 
-	// If the response contains user attributes, look for the sub attribute
+	// Extract email and other attributes from the response
 	if resp.User != nil && len(resp.User.Attributes) > 0 {
 		for _, attr := range resp.User.Attributes {
-			if attr.Name != nil && *attr.Name == "sub" && attr.Value != nil {
-				createdUser.Sub = *attr.Value
-				break
+			if attr.Name != nil && attr.Value != nil {
+				switch *attr.Name {
+				case emailAttribute:
+					createdUser.Email = *attr.Value
+				}
 			}
 		}
 	}
@@ -191,14 +196,16 @@ func (c *AWSClient) GetUser(ctx context.Context, username string) (*userpool.Use
 	user := &userpool.User{
 		Username: username,
 		Enabled:  output.Enabled,
-		Sub:      username, // The username is the sub in Cognito
+		Sub:      *output.Username, // AWS returns the sub as Username
 	}
 
 	// Extract email from user attributes
 	for _, attr := range output.UserAttributes {
-		if attr.Name != nil && *attr.Name == "email" && attr.Value != nil {
-			user.Email = *attr.Value
-			break
+		if attr.Name != nil && attr.Value != nil {
+			switch *attr.Name {
+			case emailAttribute:
+				user.Email = *attr.Value
+			}
 		}
 	}
 
@@ -217,7 +224,7 @@ func (c *AWSClient) UpdateUser(ctx context.Context, user *userpool.User) error {
 	// Update user attributes
 	attributes := []types.AttributeType{
 		{
-			Name:  aws.String("email"),
+			Name:  aws.String(emailAttribute),
 			Value: aws.String(user.Email),
 		},
 	}
@@ -310,7 +317,7 @@ func (c *AWSClient) ListUsers(ctx context.Context) ([]*userpool.User, error) {
 
 			// Extract email from user attributes
 			for _, attr := range cognitoUser.Attributes {
-				if attr.Name != nil && *attr.Name == "email" && attr.Value != nil {
+				if attr.Name != nil && *attr.Name == emailAttribute && attr.Value != nil {
 					user.Email = *attr.Value
 					break
 				}

@@ -72,7 +72,7 @@ func TestAWSClient_CreateUser(t *testing.T) {
 				Username: "testuser",
 				Email:    "test@example.com",
 				Enabled:  true,
-				Sub:      "test-sub-123",
+				Sub:      "test@example.com",
 			},
 		},
 		{
