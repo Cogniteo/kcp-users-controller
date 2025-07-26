@@ -112,6 +112,13 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		}
 	}
 
+	// Update the status subresource
+	log.Info("Updating User status", "username", user.Name, "sub", user.Status.Sub, "lastSyncTime", user.Status.LastSyncTime)
+	if err := clusterClient.Status().Update(ctx, &user); err != nil {
+		log.Error(err, "Failed to update User status")
+		return ctrl.Result{}, err
+	}
+
 	// Update the resource (spec and metadata only)
 	if err := clusterClient.Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User")
@@ -121,13 +128,6 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 	// Fetch the latest resource state to ensure we have the correct resourceVersion for status update
 	if err := clusterClient.Get(ctx, req.NamespacedName, &user); err != nil {
 		log.Error(err, "Failed to fetch User before status update")
-		return ctrl.Result{}, err
-	}
-
-	// Update the status subresource
-	log.Info("Updating User status", "username", user.Name, "sub", user.Status.Sub, "lastSyncTime", user.Status.LastSyncTime)
-	if err := clusterClient.Status().Update(ctx, &user); err != nil {
-		log.Error(err, "Failed to update User status")
 		return ctrl.Result{}, err
 	}
 
@@ -167,14 +167,13 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 		if err != nil {
 			return fmt.Errorf("failed to create user in user pool: %w", err)
 		}
-		log.Info("User created in user pool",
-			"username", user.Name, "sub", createdUser.Sub)
 
 		// Update the status with the sub
 		user.Status.Sub = createdUser.Sub
 		user.Status.UserPoolStatus = "CONFIRMED"
 		now := metav1.Now()
 		user.Status.LastSyncTime = &now
+		log.Info("User created in user pool", "username", user.Name, "sub", user.Status.Sub)
 	} else {
 		// User exists, check if update is needed
 		if existingUser.Email != poolUser.Email ||
