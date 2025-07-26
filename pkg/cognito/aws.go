@@ -231,7 +231,7 @@ func (c *AWSClient) UpdateUser(ctx context.Context, user *userpool.User) error {
 
 	updateInput := &cognitoidentityprovider.AdminUpdateUserAttributesInput{
 		UserPoolId:     aws.String(c.userPoolID),
-		Username:       aws.String(user.Username),
+		Username:       aws.String(user.Sub),
 		UserAttributes: attributes,
 	}
 
