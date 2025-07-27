@@ -43,6 +43,9 @@ type UserStatus struct {
 	// LastSyncTime is the timestamp of the last successful sync with the user pool
 	LastSyncTime *metav1.Time `json:"lastSyncTime,omitempty"`
 
+	// ObservedGeneration is the last generation that was acted upon
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
 	// Conditions represent the current service state of the User
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }

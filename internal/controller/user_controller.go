@@ -77,6 +77,15 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		return ctrl.Result{}, err
 	}
 
+	// Skip reconciliation if generation hasn't changed and status is up to date
+	// Only skip if not being deleted (DeletionTimestamp is nil)
+	if user.DeletionTimestamp == nil && user.Status.ObservedGeneration == user.Generation {
+		log.Info("Resource unchanged, skipping reconciliation",
+			"generation", user.Generation,
+			"observedGeneration", user.Status.ObservedGeneration)
+		return ctrl.Result{}, nil
+	}
+
 	// Handle finalizer for cleanup before deletion
 	finalizerName := "kcp.cogniteo.io/user-pool-cleanup"
 	if user.DeletionTimestamp != nil {
@@ -112,8 +121,11 @@ func (r *UserReconciler) Reconcile(ctx context.Context, req mcreconcile.Request)
 		}
 	}
 
+	// Update the observed generation to indicate we've processed this version
+	user.Status.ObservedGeneration = user.Generation
+
 	// Update the status subresource
-	log.Info("Updating User status", "username", user.Name, "sub", user.Status.Sub, "lastSyncTime", user.Status.LastSyncTime)
+	log.Info("Updating User status", "username", user.Name, "sub", user.Status.Sub, "lastSyncTime", user.Status.LastSyncTime, "observedGeneration", user.Status.ObservedGeneration)
 	if err := clusterClient.Status().Update(ctx, &user); err != nil {
 		log.Error(err, "Failed to update User status")
 		return ctrl.Result{}, err
@@ -153,50 +165,26 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 	var err error
 
 	if user.Status.Sub != "" {
-		// Use stored sub to check if user exists
-		existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub)
+		if existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub); err != nil {
+			return fmt.Errorf("failed to get user from user pool: %w", err)
+		}
+		log.Info("Updating user in user pool", "username", user.Name, "sub", existingUser.Sub)
+		if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
+			return fmt.Errorf("failed to update user in user pool: %w", err)
+		}
+		log.Info("User updated in user pool", "username", user.Name)
 	} else {
-		// No sub available, treat as new user
-		err = fmt.Errorf("user not found")
-	}
-
-	if err != nil {
-		// User doesn't exist, create it
 		log.Info("Creating user in user pool", "username", user.Name)
 		createdUser, err := r.UserPoolClient.CreateUser(ctx, poolUser)
 		if err != nil {
 			return fmt.Errorf("failed to create user in user pool: %w", err)
 		}
-
-		// Update the status with the sub
 		user.Status.Sub = createdUser.Sub
 		user.Status.UserPoolStatus = "CONFIRMED"
-		now := metav1.Now()
-		user.Status.LastSyncTime = &now
 		log.Info("User created in user pool", "username", user.Name, "sub", user.Status.Sub)
-	} else {
-		// User exists, check if update is needed
-		if existingUser.Email != poolUser.Email ||
-			existingUser.Enabled != poolUser.Enabled {
-			log.Info("Updating user in user pool", "username", user.Name, "sub", existingUser.Sub)
-			if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
-				return fmt.Errorf("failed to update user in user pool: %w", err)
-			}
-			log.Info("User updated in user pool", "username", user.Name)
-		} else {
-			// User exists and is up to date
-			log.Info("User already exists in user pool and is up to date",
-				"username", user.Name)
-		}
-
-		// Update the status with sync time
-		now := metav1.Now()
-		user.Status.LastSyncTime = &now
-		if user.Status.Sub == "" {
-			user.Status.Sub = existingUser.Sub
-		}
 	}
-
+	now := metav1.Now()
+	user.Status.LastSyncTime = &now
 	return nil
 }
 

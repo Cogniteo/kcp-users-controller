@@ -350,6 +350,7 @@ func TestUserReconciler(t *testing.T) {
 				Enabled:  true,
 				Sub:      "test-sub-123",
 			}, nil)
+			mockUserPool.On("UpdateUser", mock.Anything, mock.AnythingOfType("*userpool.User")).Return(nil)
 
 			reconciler := &UserReconciler{
 				UserPoolClient: mockUserPool,
@@ -360,6 +361,7 @@ func TestUserReconciler(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.NotNil(t, user.Status.LastSyncTime)
+			mockUserPool.AssertExpectations(t)
 		})
 
 		t.Run("create user fails", func(t *testing.T) {

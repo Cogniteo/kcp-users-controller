@@ -112,6 +112,11 @@ spec:
                   sync with the user pool
                 format: date-time
                 type: string
+              observedGeneration:
+                description: ObservedGeneration is the last generation that was acted
+                  upon
+                format: int64
+                type: integer
               sub:
                 description: Sub is the user's unique identifier (subject) in the
                   user pool
