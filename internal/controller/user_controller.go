@@ -23,6 +23,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -166,22 +167,29 @@ func (r *UserReconciler) syncUserWithUserPool(ctx context.Context, user *kcpv1al
 
 	if user.Status.Sub != "" {
 		if existingUser, err = r.UserPoolClient.GetUser(ctx, user.Status.Sub); err != nil {
+			r.setUserSyncedCondition(user, false, fmt.Sprintf("Failed to get user from user pool: %v", err))
 			return fmt.Errorf("failed to get user from user pool: %w", err)
 		}
 		log.Info("Updating user in user pool", "username", user.Name, "sub", existingUser.Sub)
 		if err := r.UserPoolClient.UpdateUser(ctx, poolUser); err != nil {
+			r.setUserSyncedCondition(user, false, fmt.Sprintf("Failed to update user in user pool: %v", err))
 			return fmt.Errorf("failed to update user in user pool: %w", err)
 		}
 		log.Info("User updated in user pool", "username", user.Name)
+		r.setUserSyncedCondition(user, true, "User successfully updated in user pool")
 	} else {
 		log.Info("Creating user in user pool", "username", user.Name)
 		createdUser, err := r.UserPoolClient.CreateUser(ctx, poolUser)
 		if err != nil {
+			r.setUserCreatedCondition(user, false, fmt.Sprintf("Failed to create user in user pool: %v", err))
+			r.setUserSyncedCondition(user, false, fmt.Sprintf("Failed to create user in user pool: %v", err))
 			return fmt.Errorf("failed to create user in user pool: %w", err)
 		}
 		user.Status.Sub = createdUser.Sub
 		user.Status.UserPoolStatus = "CONFIRMED"
 		log.Info("User created in user pool", "username", user.Name, "sub", user.Status.Sub)
+		r.setUserCreatedCondition(user, true, "User successfully created in user pool")
+		r.setUserSyncedCondition(user, true, "User successfully created and synced with user pool")
 	}
 	now := metav1.Now()
 	user.Status.LastSyncTime = &now
@@ -245,6 +253,37 @@ func removeFinalizer(finalizers []string, finalizer string) []string {
 		}
 	}
 	return result
+}
+
+// setCondition sets or updates a condition in the user status
+func setCondition(user *kcpv1alpha1.User, conditionType string, status metav1.ConditionStatus, reason, message string) {
+	condition := metav1.Condition{
+		Type:               conditionType,
+		Status:             status,
+		Reason:             reason,
+		Message:            message,
+		LastTransitionTime: metav1.Now(),
+	}
+
+	meta.SetStatusCondition(&user.Status.Conditions, condition)
+}
+
+// setUserCreatedCondition sets the UserCreated condition
+func (r *UserReconciler) setUserCreatedCondition(user *kcpv1alpha1.User, success bool, message string) {
+	if success {
+		setCondition(user, kcpv1alpha1.UserCreatedCondition, metav1.ConditionTrue, "UserCreated", message)
+	} else {
+		setCondition(user, kcpv1alpha1.UserCreatedCondition, metav1.ConditionFalse, "UserCreationFailed", message)
+	}
+}
+
+// setUserSyncedCondition sets the UserSynced condition
+func (r *UserReconciler) setUserSyncedCondition(user *kcpv1alpha1.User, success bool, message string) {
+	if success {
+		setCondition(user, kcpv1alpha1.UserSyncedCondition, metav1.ConditionTrue, "UserSynced", message)
+	} else {
+		setCondition(user, kcpv1alpha1.UserSyncedCondition, metav1.ConditionFalse, "UserSyncFailed", message)
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
