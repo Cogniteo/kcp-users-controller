@@ -9,7 +9,7 @@ metadata:
 spec:
   replicas:  {{ .Values.controllerManager.replicas }}
   strategy:
-    {{- toYaml .Values.controllerManager.strategy }}
+    {{- toYaml .Values.controllerManager.strategy | nindent 4 }}
   selector:
     matchLabels:
       {{- include "chart.selectorLabels" . | nindent 6 }}
